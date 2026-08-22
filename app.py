@@ -3,24 +3,25 @@ import pandas as pd
 import sqlite3
 import datetime
 import time
+import random
 import plotly.graph_objects as go
 import plotly.express as px
 from streamlit_autorefresh import st_autorefresh
 
-# Configure page without emojis
+# Configure page
 st.set_page_config(page_title="PMP Certification Portal", layout="wide", initial_sidebar_state="expanded")
 
-# --- ENTERPRISE CSS THEME ---
+# --- GOOGLE-INSPIRED MODERN EDTECH CSS ---
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;500;600;700&display=swap');
 
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
     
     html, body, [class*="css"] {
-        font-family: 'Inter', sans-serif !important;
+        font-family: 'Open Sans', sans-serif !important;
         background-color: #F8F9FA !important; 
     }
     
@@ -154,11 +155,32 @@ def get_student_history(email):
 init_db()
 
 # -------------------------------------------------------------
-# LOAD QUESTIONS
+# LOAD QUESTIONS & DYNAMICALLY SHUFFLE OPTIONS
 # -------------------------------------------------------------
 @st.cache_data
 def load_data():
-    return pd.read_excel("flexiquiz-pmp-import.xlsx")
+    df = pd.read_excel("flexiquiz-pmp-import.xlsx")
+    
+    # Shuffle options on load to fix the AI generating everything as Option A
+    for idx, row in df.iterrows():
+        opts = [
+            (row.get('Option 1 Text', ''), row.get('Option 1 Correct', '')),
+            (row.get('Option 2 Text', ''), row.get('Option 2 Correct', '')),
+            (row.get('Option 3 Text', ''), row.get('Option 3 Correct', '')),
+            (row.get('Option 4 Text', ''), row.get('Option 4 Correct', ''))
+        ]
+        random.shuffle(opts)
+        
+        df.at[idx, 'Option 1 Text'] = opts[0][0]
+        df.at[idx, 'Option 1 Correct'] = opts[0][1]
+        df.at[idx, 'Option 2 Text'] = opts[1][0]
+        df.at[idx, 'Option 2 Correct'] = opts[1][1]
+        df.at[idx, 'Option 3 Text'] = opts[2][0]
+        df.at[idx, 'Option 3 Correct'] = opts[2][1]
+        df.at[idx, 'Option 4 Text'] = opts[3][0]
+        df.at[idx, 'Option 4 Correct'] = opts[3][1]
+        
+    return df
 
 try:
     df_full = load_data()
@@ -380,7 +402,7 @@ elif st.session_state.page == "results":
     total_q = len(df)
     correct_count = 0
     
-    # Robust comparison logic (strips prefixes and compares text only)
+    # Grading logic
     for idx, row in df.iterrows():
         raw_ans = st.session_state.user_answers.get(idx, "Unanswered")
         raw_corr_opt = ""
