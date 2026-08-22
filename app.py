@@ -7,110 +7,120 @@ import plotly.graph_objects as go
 import plotly.express as px
 from streamlit_autorefresh import st_autorefresh
 
-# Configure page
-st.set_page_config(page_title="PMP® Certification Simulator", layout="wide", initial_sidebar_state="expanded")
+# Configure page without emojis
+st.set_page_config(page_title="PMP Certification Portal", layout="wide", initial_sidebar_state="expanded")
 
-# --- PREMIUM MODERN EDTECH CSS ---
-# Note: The comments inside the style tags are standard CSS comments (/* ... */) and are correct here.
+# --- ENTERPRISE CSS THEME ---
 st.markdown("""
 <style>
-    /* Import Google Fonts for a happy, modern look */
-    @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
-    /* Hide Streamlit defaults */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
     
-    /* Apply Font Family globally */
     html, body, [class*="css"] {
-        font-family: 'Nunito', sans-serif !important;
-        background-color: #F4F7FE !important; /* Soft, happy light-blue/grey background */
+        font-family: 'Inter', sans-serif !important;
+        background-color: #F8F9FA !important; 
     }
     
-    /* Headings Styling */
     h1, h2, h3 {
-        color: #1B2559 !important; /* Deep Indigo for strong contrast */
-        font-weight: 800 !important;
+        color: #202124 !important; 
+        font-weight: 600 !important;
         letter-spacing: -0.5px;
     }
-    h4, h5, h6, p { color: #2B3674 !important; }
+    h4, h5, h6, p { color: #3C4043 !important; }
     
-    /* 🚀 Vibrant Gradient Buttons */
-    .stButton > button {
-        background: linear-gradient(135deg, #FF7F50 0%, #FF416C 100%) !important;
+    /* Primary Buttons (Tech Blue) */
+    button[data-testid="baseButton-primary"] {
+        background-color: #1A73E8 !important; 
         color: white !important;
         border: none !important;
-        border-radius: 12px !important;
-        font-weight: 700 !important;
-        font-size: 16px !important;
-        padding: 12px 24px !important;
-        transition: all 0.3s ease !important;
-        box-shadow: 0 4px 15px rgba(255, 65, 108, 0.25) !important;
+        border-radius: 6px !important;
+        font-weight: 600 !important;
+        padding: 10px 24px !important;
+        box-shadow: none !important;
+        transition: background-color 0.2s ease !important;
     }
-    .stButton > button:hover {
-        transform: translateY(-2px) !important;
-        box-shadow: 0 8px 25px rgba(255, 65, 108, 0.4) !important;
+    button[data-testid="baseButton-primary"]:hover {
+        background-color: #1557B0 !important;
+    }
+    
+    /* Secondary Buttons (White with Grey Border) */
+    button[data-testid="baseButton-secondary"] {
+        background-color: #FFFFFF !important;
+        color: #5F6368 !important;
+        border: 1px solid #DADCE0 !important;
+        border-radius: 6px !important;
+        font-weight: 600 !important;
+        padding: 10px 24px !important;
+        box-shadow: none !important;
+        transition: background-color 0.2s ease !important;
+    }
+    button[data-testid="baseButton-secondary"]:hover {
+        background-color: #F1F3F4 !important;
+        color: #202124 !important;
     }
 
-    /* 📝 Modern Selectable Option Cards */
+    /* Form Cards (Login Box) */
+    [data-testid="stForm"] {
+        background-color: #FFFFFF !important;
+        border: 1px solid #DADCE0 !important;
+        border-radius: 8px !important;
+        padding: 32px !important;
+        box-shadow: 0 1px 2px 0 rgba(60,64,67,0.1) !important;
+    }
+
+    /* Interactive Radio Cards */
     .stRadio > label { 
-        font-size: 18px !important; 
-        font-weight: 700 !important; 
-        color: #1B2559 !important; 
+        font-size: 16px !important; 
+        font-weight: 600 !important; 
+        color: #202124 !important; 
         margin-bottom: 12px !important; 
     }
     .stRadio div[role="radiogroup"] > label {
-        padding: 18px 20px !important; 
+        padding: 16px 20px !important; 
         background-color: #FFFFFF !important; 
-        border: 2px solid #E9EDF7 !important; 
-        border-radius: 12px !important; 
+        border: 1px solid #DADCE0 !important; 
+        border-radius: 8px !important; 
         margin-bottom: 12px !important; 
-        box-shadow: 0 2px 10px rgba(0,0,0,0.02) !important;
         transition: all 0.2s ease-in-out !important;
-        color: #2B3674 !important;
-        font-weight: 600 !important;
+        color: #3C4043 !important;
+        font-weight: 500 !important;
         cursor: pointer !important;
     }
     .stRadio div[role="radiogroup"] > label:hover {
-        border-color: #4318FF !important; /* Vibrant Indigo hover accent */
-        background-color: #F8F9FF !important;
-        transform: scale(1.01) !important;
+        background-color: #F8F9FA !important;
+        border-color: #1A73E8 !important;
     }
     
-    /* ⏱️ Timer Styling - Tech Blue */
+    /* Timer Display */
     .timer-text {
-        font-size: 24px; 
-        font-weight: 800; 
-        color: #FFFFFF; 
+        font-size: 20px; 
+        font-weight: 600; 
+        color: #1A73E8; 
         text-align: center; 
         padding: 16px; 
-        background: linear-gradient(135deg, #4318FF 0%, #868CFF 100%); 
-        border-radius: 12px; 
-        box-shadow: 0 4px 15px rgba(67, 24, 255, 0.25);
+        background: #E8F0FE; 
+        border-radius: 8px; 
+        border: 1px solid #D2E3FC;
         margin-bottom: 20px;
     }
     
-    /* Text Inputs (Login Form) */
+    /* Clean Text Inputs */
     .stTextInput input {
-        border-radius: 10px !important;
-        border: 2px solid #E9EDF7 !important;
+        border-radius: 6px !important;
+        border: 1px solid #DADCE0 !important;
         padding: 12px !important;
-        font-weight: 600 !important;
-        color: #1B2559 !important;
+        font-weight: 500 !important;
+        color: #202124 !important;
     }
     .stTextInput input:focus {
-        border-color: #4318FF !important;
-        box-shadow: 0 0 0 2px rgba(67, 24, 255, 0.2) !important;
+        border-color: #1A73E8 !important;
+        box-shadow: 0 0 0 1px #1A73E8 !important;
     }
     
-    /* Metric Cards (Results) */
-    [data-testid="stMetricValue"] {
-        color: #4318FF !important;
-        font-weight: 800 !important;
-    }
-    
-    hr { border-top: 2px solid #E9EDF7 !important; }
+    hr { border-top: 1px solid #E8EAED !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -175,41 +185,43 @@ if st.session_state.page == "landing":
     st.markdown("<br><br>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        st.title("PMP® Master Simulator")
-        st.caption("Premium 2026 PMI Standards Experience")
+        st.title("PMP Certification Portal")
+        st.caption("Computer-Based Testing Environment | 2026 Standards")
         st.divider()
         with st.form("login_form"):
-            st.markdown("### 👋 Welcome Back")
-            name = st.text_input("Full Name", placeholder="e.g. Sagar Sharma")
-            email = st.text_input("Email Address", placeholder="e.g. sagar@example.com")
-            if st.form_submit_button("Enter Dashboard 🚀", type="primary", use_container_width=True):
+            st.markdown("### Candidate Authentication")
+            name = st.text_input("Full Legal Name", placeholder="e.g. Sagar Sharma")
+            email = st.text_input("Registered Email Address", placeholder="e.g. sagar@example.com")
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            if st.form_submit_button("Access Dashboard", type="primary", use_container_width=True):
                 if name.strip() and email.strip():
                     st.session_state.student_name = name.strip()
                     st.session_state.student_email = email.strip()
                     st.session_state.page = "dashboard"
                     st.rerun()
                 else:
-                    st.error("Please provide your name and email to continue.")
+                    st.error("Authentication Error: Name and Email are required.")
 
 # -------------------------------------------------------------
 # PAGE 2: DASHBOARD & TREND ANALYTICS
 # -------------------------------------------------------------
 elif st.session_state.page == "dashboard":
-    st.sidebar.markdown(f"**👤 Candidate:** {st.session_state.student_name}")
-    st.sidebar.markdown(f"**✉️ ID:** {st.session_state.student_email}")
+    st.sidebar.markdown(f"**Candidate:** {st.session_state.student_name}")
+    st.sidebar.markdown(f"**ID:** {st.session_state.student_email}")
     st.sidebar.markdown("<br>", unsafe_allow_html=True)
-    if st.sidebar.button("Logout", use_container_width=True):
+    if st.sidebar.button("Secure Logout", use_container_width=True):
         st.session_state.clear()
         st.rerun()
 
-    st.title("My Performance Dashboard")
+    st.title("Performance Dashboard")
     st.divider()
 
-    st.markdown("### 🎯 Launch Assessments")
+    st.markdown("### Authorized Assessments")
     c1, c2, c3 = st.columns(3)
     with c1:
-        st.info("### Diagnostic\n\n**25 Questions | 35 Mins**\n\nCross-domain baseline.")
-        if st.button("Start Diagnostic ⚡", type="primary", use_container_width=True):
+        st.info("**Diagnostic Baseline**\n\n25 Questions | 35 Minutes\n\nCross-domain assessment.")
+        if st.button("Launch Diagnostic", type="primary", use_container_width=True):
             st.session_state.active_df = df_full.head(25).copy()
             st.session_state.exam_title = "Diagnostic Baseline Assessment"
             st.session_state.end_time = time.time() + (35 * 60)
@@ -221,15 +233,15 @@ elif st.session_state.page == "dashboard":
             st.rerun()
 
     with c2:
-        st.success("### Domain Sprint\n\n**60 Questions | 75 Mins**\n\nTargeted domain focus.")
-        st.button("Unlock Sprint 🔒", disabled=True, use_container_width=True)
+        st.success("**Domain Specialization**\n\n60 Questions | 75 Minutes\n\nTargeted domain analysis.")
+        st.button("Launch Specialization", disabled=True, use_container_width=True)
 
     with c3:
-        st.warning("### Full Mock\n\n**180 Questions | 230 Mins**\n\nUltimate exam replication.")
-        st.button("Unlock Mock 🔒", disabled=True, use_container_width=True)
+        st.warning("**Full Certification Mock**\n\n180 Questions | 230 Minutes\n\nComplete CBT replication.")
+        st.button("Launch Full Mock", disabled=True, use_container_width=True)
 
     st.markdown("---")
-    st.markdown("### 📈 Readiness Analytics")
+    st.markdown("### Readiness Analytics")
     history_df = get_student_history(st.session_state.student_email)
     
     if len(history_df) > 0:
@@ -237,21 +249,20 @@ elif st.session_state.page == "dashboard":
         fig = px.line(chart_df, x="date_taken", y="percentage", markers=True, 
                       title="Cumulative Performance Trend",
                       labels={"date_taken": "Date", "percentage": "Score (%)"},
-                      color_discrete_sequence=["#4318FF"]) # Vibrant Indigo line
+                      color_discrete_sequence=["#1A73E8"]) 
         
-        # Coral threshold line
-        fig.add_hline(y=70, line_dash="dash", line_color="#FF7F50", annotation_text="Target Score (70%)", annotation_position="bottom right")
-        fig.update_layout(plot_bgcolor="#FFFFFF", paper_bgcolor="#FFFFFF", yaxis=dict(range=[0, 105], gridcolor="#F4F7FE"), xaxis=dict(gridcolor="#F4F7FE"))
+        fig.add_hline(y=70, line_dash="dash", line_color="#C5221F", annotation_text="Target Score (70%)", annotation_position="bottom right")
+        fig.update_layout(plot_bgcolor="#FFFFFF", paper_bgcolor="#F8F9FA", yaxis=dict(range=[0, 105], gridcolor="#F1F3F4"), xaxis=dict(gridcolor="#F1F3F4"))
         st.plotly_chart(fig, use_container_width=True)
 
-        st.markdown("#### Detailed History")
+        st.markdown("#### Assessment History")
         display_df = history_df.copy()
-        display_df["Result"] = display_df["passed"].apply(lambda x: "🟢 PASS" if x == 1 else "🟡 REVIEW")
+        display_df["Result"] = display_df["passed"].apply(lambda x: "PASS" if x == 1 else "REVIEW")
         display_df["Score"] = display_df["score"].astype(str) + " / " + display_df["total_questions"].astype(str)
         display_df["Percentage"] = display_df["percentage"].apply(lambda x: f"{x:.1f}%")
         st.dataframe(display_df[["date_taken", "exam_title", "Score", "Percentage", "Result"]].rename(columns={"date_taken": "Date"}), use_container_width=True, hide_index=True)
     else:
-        st.caption("Start an assessment above to unlock your predictive analytics.")
+        st.caption("Complete an assessment above to generate your predictive analytics.")
 
 # -------------------------------------------------------------
 # PAGE 3: LIVE EXAM
@@ -268,20 +279,20 @@ elif st.session_state.page == "exam":
     row = df.iloc[cq]
 
     mins, secs = divmod(time_left, 60)
-    st.sidebar.markdown(f"<div class='timer-text'>⏱️ {mins:02d}:{secs:02d}</div>", unsafe_allow_html=True)
+    st.sidebar.markdown(f"<div class='timer-text'>Time Remaining<br>{mins:02d}:{secs:02d}</div>", unsafe_allow_html=True)
     st_autorefresh(interval=10000, limit=None, key="timer_refresh")
 
-    if st.sidebar.button("Review Answers", use_container_width=True):
+    if st.sidebar.button("Review Progress", use_container_width=True):
         st.session_state.page = "pre_submit_review"
         st.rerun()
 
-    st.markdown(f"#### Question {cq + 1} of {total_q}")
-    st.markdown(f"<p style='font-size: 20px; font-weight: 600; margin-bottom: 24px; color: #1B2559;'>{row['Question Text']}</p>", unsafe_allow_html=True)
+    st.markdown(f"#### Item {cq + 1} of {total_q}")
+    st.markdown(f"<p style='font-size: 18px; font-weight: 600; margin-bottom: 24px; color: #202124;'>{row['Question Text']}</p>", unsafe_allow_html=True)
     
     options = [f"A. {row['Option 1 Text']}", f"B. {row['Option 2 Text']}", f"C. {row['Option 3 Text']}", f"D. {row['Option 4 Text']}"]
     current_val = st.session_state.user_answers.get(cq, None)
 
-    selected = st.radio("Choose your answer:", options, index=options.index(current_val) if current_val in options else None, label_visibility="collapsed", key=f"radio_{cq}")
+    selected = st.radio("Select an option:", options, index=options.index(current_val) if current_val in options else None, label_visibility="collapsed", key=f"radio_{cq}")
     if selected:
         st.session_state.user_answers[cq] = selected
 
@@ -289,16 +300,16 @@ elif st.session_state.page == "exam":
 
     c1, c2, c3, c4 = st.columns([1, 1, 2, 1])
     with c1:
-        if st.button("⬅️ Back", disabled=(cq == 0), use_container_width=True):
+        if st.button("Previous", disabled=(cq == 0), use_container_width=True):
             st.session_state.current_q -= 1
             st.rerun()
     with c2:
-        is_flagged = st.checkbox("🚩 Flag for Later", value=(cq in st.session_state.flagged))
+        is_flagged = st.checkbox("Flag for Review", value=(cq in st.session_state.flagged))
         if is_flagged: st.session_state.flagged.add(cq)
         else: st.session_state.flagged.discard(cq)
     with c4:
         if cq < total_q - 1:
-            if st.button("Next ➡️", type="primary", use_container_width=True):
+            if st.button("Next", type="primary", use_container_width=True):
                 st.session_state.current_q += 1
                 st.rerun()
         else:
@@ -321,19 +332,19 @@ elif st.session_state.page == "pre_submit_review":
         st.session_state.page = "results"
         st.rerun()
     mins, secs = divmod(time_left, 60)
-    st.sidebar.markdown(f"<div class='timer-text'>⏱️ {mins:02d}:{secs:02d}</div>", unsafe_allow_html=True)
+    st.sidebar.markdown(f"<div class='timer-text'>Time Remaining<br>{mins:02d}:{secs:02d}</div>", unsafe_allow_html=True)
     st_autorefresh(interval=10000, limit=None, key="timer_refresh_review")
 
-    st.title("Review Your Work")
+    st.title("Pre-Submission Review")
     st.divider()
 
     if unanswered_count > 0:
-        st.warning(f"Heads up! You have {unanswered_count} unanswered questions.")
+        st.warning(f"Notice: You have {unanswered_count} unanswered items.")
     else:
-        st.success("Great job! All questions answered.")
+        st.success("All items answered.")
 
     hc1, hc2, hc3, hc4 = st.columns([1, 2, 2, 2])
-    hc1.markdown("**Q#**")
+    hc1.markdown("**Item**")
     hc2.markdown("**Status**")
     hc3.markdown("**Flagged**")
     hc4.markdown("**Action**")
@@ -345,10 +356,10 @@ elif st.session_state.page == "pre_submit_review":
         is_flag = idx in st.session_state.flagged
         
         c1, c2, c3, c4 = st.columns([1, 2, 2, 2])
-        c1.write(f"{q_num}")
-        c2.write("✅ Answered" if is_ans else "❌ Incomplete")
-        c3.write("🚩 Yes" if is_flag else "—")
-        if c4.button(f"Jump to Q{q_num}", key=f"jump_{idx}"):
+        c1.write(f"Item {q_num}")
+        c2.write("Answered" if is_ans else "Incomplete")
+        c3.write("Yes" if is_flag else "—")
+        if c4.button(f"Review Item {q_num}", key=f"jump_{idx}"):
             st.session_state.current_q = idx
             st.session_state.page = "exam"
             st.rerun()
@@ -357,7 +368,7 @@ elif st.session_state.page == "pre_submit_review":
     st.markdown("<br>", unsafe_allow_html=True)
     _, col_center, _ = st.columns([1, 2, 1])
     with col_center:
-        if st.button("Final Submit 🚀", type="primary", use_container_width=True):
+        if st.button("Confirm & Submit Assessment", type="primary", use_container_width=True):
             st.session_state.page = "results"
             st.rerun()
 
@@ -369,15 +380,21 @@ elif st.session_state.page == "results":
     total_q = len(df)
     correct_count = 0
     
+    # Robust comparison logic (strips prefixes and compares text only)
     for idx, row in df.iterrows():
-        ans = st.session_state.user_answers.get(idx)
-        corr_opt = ""
-        if str(row.get('Option 1 Correct', '')).strip().lower() == 'yes': corr_opt = f"A. {row['Option 1 Text']}"
-        elif str(row.get('Option 2 Correct', '')).strip().lower() == 'yes': corr_opt = f"B. {row['Option 2 Text']}"
-        elif str(row.get('Option 3 Correct', '')).strip().lower() == 'yes': corr_opt = f"C. {row['Option 3 Text']}"
-        elif str(row.get('Option 4 Correct', '')).strip().lower() == 'yes': corr_opt = f"D. {row['Option 4 Text']}"
+        raw_ans = st.session_state.user_answers.get(idx, "Unanswered")
+        raw_corr_opt = ""
+        
+        if str(row.get('Option 1 Correct', '')).strip().lower() == 'yes': raw_corr_opt = f"A. {row['Option 1 Text']}"
+        elif str(row.get('Option 2 Correct', '')).strip().lower() == 'yes': raw_corr_opt = f"B. {row['Option 2 Text']}"
+        elif str(row.get('Option 3 Correct', '')).strip().lower() == 'yes': raw_corr_opt = f"C. {row['Option 3 Text']}"
+        elif str(row.get('Option 4 Correct', '')).strip().lower() == 'yes': raw_corr_opt = f"D. {row['Option 4 Text']}"
 
-        if ans == corr_opt: correct_count += 1
+        clean_user = raw_ans[3:].strip() if raw_ans != "Unanswered" else "Unanswered"
+        clean_corr = raw_corr_opt[3:].strip()
+
+        if clean_user == clean_corr: 
+            correct_count += 1
 
     percentage = (correct_count / total_q) * 100
     is_passed = percentage >= 70
@@ -386,25 +403,24 @@ elif st.session_state.page == "results":
         save_attempt(st.session_state.student_name, st.session_state.student_email, st.session_state.exam_title, correct_count, total_q, percentage, is_passed)
         st.session_state.saved_attempt = True
 
-    st.title("Your Score Report 🎉")
+    st.title("Official Score Report")
     st.divider()
 
     col_chart, col_metrics = st.columns([1, 1])
     
     with col_chart:
-        # Happy, Vibrant Gauge Chart (Using Python comments #)
         fig = go.Figure(go.Indicator(
             mode = "gauge+number",
             value = percentage,
-            title = {'text': "Final Score (%)", 'font': {'size': 20, 'color': '#1B2559', 'family': 'Nunito'}},
-            number = {'font': {'color': '#4318FF', 'family': 'Nunito', 'weight': 'bold'}},
+            title = {'text': "Final Score (%)", 'font': {'size': 20, 'color': '#202124'}},
+            number = {'font': {'color': '#1A73E8', 'weight': 'bold'}},
             gauge = {
-                'axis': {'range': [0, 100], 'tickwidth': 1, 'tickcolor': "#E9EDF7"},
-                'bar': {'color': "#4318FF"}, # Electric Indigo
+                'axis': {'range': [0, 100], 'tickwidth': 1, 'tickcolor': "#DADCE0"},
+                'bar': {'color': "#4285F4"}, 
                 'steps' : [
-                    {'range': [0, 69.9], 'color': "#FFF5F5"}, 
-                    {'range': [70, 100], 'color': "#F0FFF4"}], # Soft Mint for pass
-                'threshold' : {'line': {'color': "#FF7F50", 'width': 4}, 'thickness': 0.75, 'value': 70} 
+                    {'range': [0, 69.9], 'color': "#FCE8E6"}, 
+                    {'range': [70, 100], 'color': "#E6F4EA"}], 
+                'threshold' : {'line': {'color': "#EA4335", 'width': 4}, 'thickness': 0.75, 'value': 70} 
             }
         ))
         fig.update_layout(height=300, margin=dict(l=20, r=20, t=50, b=20), paper_bgcolor="rgba(0,0,0,0)")
@@ -412,14 +428,14 @@ elif st.session_state.page == "results":
 
     with col_metrics:
         st.markdown("<br><br>", unsafe_allow_html=True)
-        st.metric("Questions Correct", f"{correct_count} / {total_q}")
+        st.metric("Items Correct", f"{correct_count} / {total_q}")
         if is_passed:
-            st.success("### 🎉 PASSED\nYou hit the target score!")
+            st.success("Target Proficiency Achieved: PASS")
         else:
-            st.warning("### 💡 REVIEW NEEDED\nKeep practicing, you'll get it next time!")
+            st.error("Target Proficiency Not Met: REVIEW REQUIRED")
 
     st.markdown("---")
-    st.subheader("Mindset Explanations 🧠")
+    st.subheader("Item Analysis & Rationales")
 
     for idx, row in df.iterrows():
         user_ans = st.session_state.user_answers.get(idx, "Unanswered")
@@ -429,16 +445,50 @@ elif st.session_state.page == "results":
         elif str(row.get('Option 3 Correct', '')).strip().lower() == 'yes': corr_opt = f"C. {row['Option 3 Text']}"
         elif str(row.get('Option 4 Correct', '')).strip().lower() == 'yes': corr_opt = f"D. {row['Option 4 Text']}"
 
-        is_corr = (user_ans == corr_opt)
-        status_mark = "🟢" if is_corr else "🔴"
+        clean_user = user_ans[3:].strip() if user_ans != "Unanswered" else "Unanswered"
+        clean_corr = corr_opt[3:].strip()
+        is_corr = (clean_user == clean_corr)
 
-        with st.expander(f"{status_mark} Q{idx+1}: {'Nailed it!' if is_corr else 'Review This'}"):
-            st.markdown(f"**{row['Question Text']}**")
-            st.markdown(f"**Your Choice:** `{user_ans}`")
-            st.markdown(f"**Correct Answer:** `{corr_opt}`")
-            st.info(f"**PMP Mindset Rationale:**\n\n{row['Question feedback']}")
+        # HTML Rendering for Exact Pastel Colors
+        if is_corr:
+            bg_color = "#E6F4EA"
+            border_color = "#CEEAD6"
+            text_color = "#137333"
+            status_text = "Correct"
+            
+            html_card = f'''
+            <div style="background-color: {bg_color}; border: 1px solid {border_color}; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
+                <h4 style="color: {text_color}; margin-top: 0; margin-bottom: 12px; font-size: 16px; font-weight: 700;">Item {idx+1}: {status_text}</h4>
+                <p style="font-weight: 600; color: #202124; font-size: 16px; margin-bottom: 16px;">{row['Question Text']}</p>
+                <p style="margin-bottom: 6px; color: {text_color}; font-size: 15px;"><b>Candidate Selection:</b> {user_ans}</p>
+                <p style="margin-bottom: 16px; color: {text_color}; font-size: 15px;"><b>Correct Selection:</b> {corr_opt}</p>
+                <div style="background-color: rgba(255,255,255,0.7); padding: 14px; border-radius: 6px; color: #3C4043; font-size: 15px; border-left: 4px solid {text_color};">
+                    <b>Rationale:</b> {row['Question feedback']}
+                </div>
+            </div>
+            '''
+        else:
+            bg_color = "#FCE8E6"
+            border_color = "#FAD2CF"
+            wrong_color = "#C5221F"
+            right_color = "#137333"
+            status_text = "Review"
+            
+            html_card = f'''
+            <div style="background-color: {bg_color}; border: 1px solid {border_color}; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
+                <h4 style="color: {wrong_color}; margin-top: 0; margin-bottom: 12px; font-size: 16px; font-weight: 700;">Item {idx+1}: {status_text}</h4>
+                <p style="font-weight: 600; color: #202124; font-size: 16px; margin-bottom: 16px;">{row['Question Text']}</p>
+                <p style="margin-bottom: 6px; color: {wrong_color}; font-size: 15px;"><b>Candidate Selection:</b> {user_ans}</p>
+                <p style="margin-bottom: 16px; color: {right_color}; font-size: 15px;"><b>Correct Selection:</b> {corr_opt}</p>
+                <div style="background-color: rgba(255,255,255,0.7); padding: 14px; border-radius: 6px; color: #3C4043; font-size: 15px; border-left: 4px solid {right_color};">
+                    <b>Rationale:</b> {row['Question feedback']}
+                </div>
+            </div>
+            '''
+            
+        st.markdown(html_card, unsafe_allow_html=True)
 
     st.divider()
-    if st.button("Return to Dashboard 🏠", type="primary", use_container_width=True):
+    if st.button("Return to Dashboard", type="primary", use_container_width=True):
         st.session_state.page = "dashboard"
         st.rerun()
