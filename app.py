@@ -11,6 +11,7 @@ from streamlit_autorefresh import st_autorefresh
 st.set_page_config(page_title="PMP® Certification Simulator", layout="wide", initial_sidebar_state="expanded")
 
 # --- PREMIUM MODERN EDTECH CSS ---
+# Note: The comments inside the style tags are standard CSS comments (/* ... */) and are correct here.
 st.markdown("""
 <style>
     /* Import Google Fonts for a happy, modern look */
@@ -391,7 +392,7 @@ elif st.session_state.page == "results":
     col_chart, col_metrics = st.columns([1, 1])
     
     with col_chart:
-        # Happy, Vibrant Gauge Chart
+        # Happy, Vibrant Gauge Chart (Using Python comments #)
         fig = go.Figure(go.Indicator(
             mode = "gauge+number",
             value = percentage,
@@ -399,10 +400,10 @@ elif st.session_state.page == "results":
             number = {'font': {'color': '#4318FF', 'family': 'Nunito', 'weight': 'bold'}},
             gauge = {
                 'axis': {'range': [0, 100], 'tickwidth': 1, 'tickcolor': "#E9EDF7"},
-                'bar': {'color': "#4318FF"}, /* Electric Indigo */
+                'bar': {'color': "#4318FF"}, # Electric Indigo
                 'steps' : [
                     {'range': [0, 69.9], 'color': "#FFF5F5"}, 
-                    {'range': [70, 100], 'color': "#F0FFF4"}], /* Soft Mint for pass */
+                    {'range': [70, 100], 'color': "#F0FFF4"}], # Soft Mint for pass
                 'threshold' : {'line': {'color': "#FF7F50", 'width': 4}, 'thickness': 0.75, 'value': 70} 
             }
         ))
