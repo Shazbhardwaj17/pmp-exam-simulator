@@ -47,7 +47,7 @@ st.markdown("""
         background-color: #1557B0 !important;
     }
     
-    /* Secondary Buttons (White with Grey Border) */
+    /* Secondary Buttons */
     button[data-testid="baseButton-secondary"] {
         background-color: #FFFFFF !important;
         color: #5F6368 !important;
@@ -63,7 +63,7 @@ st.markdown("""
         color: #202124 !important;
     }
 
-    /* Form Cards (Login Box) */
+    /* Form Cards */
     [data-testid="stForm"] {
         background-color: #FFFFFF !important;
         border: 1px solid #DADCE0 !important;
@@ -72,14 +72,14 @@ st.markdown("""
         box-shadow: 0 1px 2px 0 rgba(60,64,67,0.1) !important;
     }
 
-    /* Interactive Radio Cards */
-    .stRadio > label { 
+    /* Interactive Radio/Checkbox Cards */
+    .stRadio > label, .stMultiSelect > label { 
         font-size: 16px !important; 
         font-weight: 600 !important; 
         color: #202124 !important; 
         margin-bottom: 12px !important; 
     }
-    .stRadio div[role="radiogroup"] > label {
+    .stRadio div[role="radiogroup"] > label, .stCheckbox {
         padding: 16px 20px !important; 
         background-color: #FFFFFF !important; 
         border: 1px solid #DADCE0 !important; 
@@ -155,13 +155,14 @@ def get_student_history(email):
 init_db()
 
 # -------------------------------------------------------------
-# LOAD QUESTIONS & DYNAMICALLY SHUFFLE OPTIONS
+# LOAD QUESTIONS & DYNAMICALLY SHUFFLE OPTIONS (Multi-tab)
 # -------------------------------------------------------------
 @st.cache_data
 def load_data():
-    df = pd.read_excel("flexiquiz-pmp-import.xlsx")
+    all_tabs = pd.read_excel("pmp_question_bank.xlsx", sheet_name=None)
+    df = pd.concat(all_tabs.values(), ignore_index=True)
+    df = df.fillna("") 
     
-    # Shuffle options on load to fix the AI generating everything as Option A
     for idx, row in df.iterrows():
         opts = [
             (row.get('Option 1 Text', ''), row.get('Option 1 Correct', '')),
@@ -184,8 +185,8 @@ def load_data():
 
 try:
     df_full = load_data()
-except Exception:
-    st.error("System Error: Question bank unavailable.")
+except Exception as e:
+    st.error(f"System Error: Question bank unavailable. Please ensure 'pmp_question_bank.xlsx' is uploaded. Error: {e}")
     st.stop()
 
 # -------------------------------------------------------------
@@ -212,8 +213,8 @@ if st.session_state.page == "landing":
         st.divider()
         with st.form("login_form"):
             st.markdown("### Candidate Authentication")
-            name = st.text_input("Full Legal Name", placeholder="e.g. Sagar Sharma")
-            email = st.text_input("Registered Email Address", placeholder="e.g. sagar@example.com")
+            name = st.text_input("Full Legal Name", placeholder="e.g. John Doe")
+            email = st.text_input("Registered Email Address", placeholder="e.g. john@example.com")
             
             st.markdown("<br>", unsafe_allow_html=True)
             if st.form_submit_button("Access Dashboard", type="primary", use_container_width=True):
@@ -240,27 +241,28 @@ elif st.session_state.page == "dashboard":
     st.divider()
 
     st.markdown("### Authorized Assessments")
-    c1, c2, c3 = st.columns(3)
+    
+    available_sprints = df_full['Exam_Suite_ID'].dropna().unique().tolist()
+    
+    c1, c2 = st.columns([2, 1])
     with c1:
-        st.info("**Diagnostic Baseline**\n\n25 Questions | 35 Minutes\n\nCross-domain assessment.")
-        if st.button("Launch Diagnostic", type="primary", use_container_width=True):
-            st.session_state.active_df = df_full.head(25).copy()
-            st.session_state.exam_title = "Diagnostic Baseline Assessment"
-            st.session_state.end_time = time.time() + (35 * 60)
+        selected_exam = st.selectbox("Select Target Domain Sprint or Full Mock Exam:", available_sprints)
+    
+    with c2:
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("Launch Selected Exam", type="primary", use_container_width=True):
+            st.session_state.active_df = df_full[df_full['Exam_Suite_ID'] == selected_exam].reset_index(drop=True).copy()
+            q_count = len(st.session_state.active_df)
+            
+            # Calculate time limit (approx 1.2 mins per question as per real exam)
+            st.session_state.end_time = time.time() + (int(q_count * 1.25) * 60)
+            st.session_state.exam_title = selected_exam
             st.session_state.user_answers = {}
             st.session_state.flagged = set()
             st.session_state.current_q = 0
             st.session_state.saved_attempt = False
             st.session_state.page = "exam"
             st.rerun()
-
-    with c2:
-        st.success("**Domain Specialization**\n\n60 Questions | 75 Minutes\n\nTargeted domain analysis.")
-        st.button("Launch Specialization", disabled=True, use_container_width=True)
-
-    with c3:
-        st.warning("**Full Certification Mock**\n\n180 Questions | 230 Minutes\n\nComplete CBT replication.")
-        st.button("Launch Full Mock", disabled=True, use_container_width=True)
 
     st.markdown("---")
     st.markdown("### Readiness Analytics")
@@ -287,7 +289,7 @@ elif st.session_state.page == "dashboard":
         st.caption("Complete an assessment above to generate your predictive analytics.")
 
 # -------------------------------------------------------------
-# PAGE 3: LIVE EXAM
+# PAGE 3: LIVE EXAM (Handles Multiple Choice & Matching)
 # -------------------------------------------------------------
 elif st.session_state.page == "exam":
     time_left = int(st.session_state.end_time - time.time())
@@ -311,12 +313,24 @@ elif st.session_state.page == "exam":
     st.markdown(f"#### Item {cq + 1} of {total_q}")
     st.markdown(f"<p style='font-size: 18px; font-weight: 600; margin-bottom: 24px; color: #202124;'>{row['Question Text']}</p>", unsafe_allow_html=True)
     
-    options = [f"A. {row['Option 1 Text']}", f"B. {row['Option 2 Text']}", f"C. {row['Option 3 Text']}", f"D. {row['Option 4 Text']}"]
-    current_val = st.session_state.user_answers.get(cq, None)
-
-    selected = st.radio("Select an option:", options, index=options.index(current_val) if current_val in options else None, label_visibility="collapsed", key=f"radio_{cq}")
-    if selected:
-        st.session_state.user_answers[cq] = selected
+    options = [row['Option 1 Text'], row['Option 2 Text'], row['Option 3 Text'], row['Option 4 Text']]
+    q_text_lower = str(row['Question Text']).lower()
+    
+    if "(choose 2)" in q_text_lower:
+        st.caption("Select exactly TWO answers.")
+        current_vals = st.session_state.user_answers.get(cq, [])
+        selected = st.multiselect("Your answers:", options, default=current_vals, key=f"ms_{cq}")
+        if selected:
+            st.session_state.user_answers[cq] = selected
+            
+    else:
+        if "(match the following)" in q_text_lower:
+            st.caption("Select the correct matching sequence.")
+            
+        current_val = st.session_state.user_answers.get(cq, None)
+        selected = st.radio("Select an option:", options, index=options.index(current_val) if current_val in options else None, label_visibility="collapsed", key=f"radio_{cq}")
+        if selected:
+            st.session_state.user_answers[cq] = selected
 
     st.divider()
 
@@ -374,7 +388,7 @@ elif st.session_state.page == "pre_submit_review":
 
     for idx in range(total_q):
         q_num = idx + 1
-        is_ans = idx in st.session_state.user_answers
+        is_ans = idx in st.session_state.user_answers and len(st.session_state.user_answers[idx]) > 0
         is_flag = idx in st.session_state.flagged
         
         c1, c2, c3, c4 = st.columns([1, 2, 2, 2])
@@ -395,28 +409,40 @@ elif st.session_state.page == "pre_submit_review":
             st.rerun()
 
 # -------------------------------------------------------------
-# PAGE 5: SCORE & EXPLANATIONS
+# PAGE 5: PMI-STYLE SCORE REPORT & RATIONALES
 # -------------------------------------------------------------
 elif st.session_state.page == "results":
     df = st.session_state.active_df
     total_q = len(df)
     correct_count = 0
+    domain_scores = {'People': {'earned': 0, 'total': 0}, 'Process': {'earned': 0, 'total': 0}, 'Business Environment': {'earned': 0, 'total': 0}}
     
-    # Grading logic
     for idx, row in df.iterrows():
-        raw_ans = st.session_state.user_answers.get(idx, "Unanswered")
-        raw_corr_opt = ""
-        
-        if str(row.get('Option 1 Correct', '')).strip().lower() == 'yes': raw_corr_opt = f"A. {row['Option 1 Text']}"
-        elif str(row.get('Option 2 Correct', '')).strip().lower() == 'yes': raw_corr_opt = f"B. {row['Option 2 Text']}"
-        elif str(row.get('Option 3 Correct', '')).strip().lower() == 'yes': raw_corr_opt = f"C. {row['Option 3 Text']}"
-        elif str(row.get('Option 4 Correct', '')).strip().lower() == 'yes': raw_corr_opt = f"D. {row['Option 4 Text']}"
+        user_ans = st.session_state.user_answers.get(idx, [])
+        if isinstance(user_ans, str): user_ans = [user_ans]
+            
+        correct_opts = []
+        if str(row.get('Option 1 Correct', '')).strip().lower() == 'yes': correct_opts.append(row['Option 1 Text'])
+        if str(row.get('Option 2 Correct', '')).strip().lower() == 'yes': correct_opts.append(row['Option 2 Text'])
+        if str(row.get('Option 3 Correct', '')).strip().lower() == 'yes': correct_opts.append(row['Option 3 Text'])
+        if str(row.get('Option 4 Correct', '')).strip().lower() == 'yes': correct_opts.append(row['Option 4 Text'])
 
-        clean_user = raw_ans[3:].strip() if raw_ans != "Unanswered" else "Unanswered"
-        clean_corr = raw_corr_opt[3:].strip()
-
-        if clean_user == clean_corr: 
+        is_corr = (sorted(user_ans) == sorted(correct_opts)) and len(user_ans) > 0
+        if is_corr:
             correct_count += 1
+            
+        # --- DYNAMIC DOMAIN INFERENCE FROM EXAM SUITE ID ---
+        exam_suite = str(row.get('Exam_Suite_ID', '')).lower()
+        if 'people' in exam_suite:
+            inferred_domain = 'People'
+        elif 'business' in exam_suite or 'be_' in exam_suite:
+            inferred_domain = 'Business Environment'
+        else:
+            inferred_domain = 'Process' # Serves as fallback for Process and Mixed Mocks
+            
+        domain_scores[inferred_domain]['total'] += 1
+        if is_corr:
+            domain_scores[inferred_domain]['earned'] += 1
 
     percentage = (correct_count / total_q) * 100
     is_passed = percentage >= 70
@@ -455,59 +481,71 @@ elif st.session_state.page == "results":
             st.success("Target Proficiency Achieved: PASS")
         else:
             st.error("Target Proficiency Not Met: REVIEW REQUIRED")
+            
+    # --- PMI DOMAIN BREAKDOWN ---
+    st.markdown("### Domain Breakdown")
+    st.caption("Performance by PMI Target Level")
+    
+    def get_target_level(pct):
+        if pct >= 85: return "Above Target"
+        elif pct >= 75: return "Target"
+        elif pct >= 65: return "Below Target"
+        else: return "Needs Improvement"
+
+    for dom in ["People", "Process", "Business Environment"]:
+        stats = domain_scores[dom]
+        if stats['total'] > 0:
+            dom_pct = (stats['earned'] / stats['total']) * 100
+            lvl = get_target_level(dom_pct)
+            colr = "green" if "Target" in lvl and "Below" not in lvl else "red"
+            
+            d_col1, d_col2 = st.columns([1, 3])
+            with d_col1:
+                st.write(f"**{dom}**")
+            with d_col2:
+                st.markdown(f"<span style='color:{colr}; font-weight:bold;'>{lvl}</span> ({stats['earned']}/{stats['total']})", unsafe_allow_html=True)
+                st.progress(int(dom_pct))
 
     st.markdown("---")
     st.subheader("Item Analysis & Rationales")
 
     for idx, row in df.iterrows():
-        user_ans = st.session_state.user_answers.get(idx, "Unanswered")
-        corr_opt = ""
-        if str(row.get('Option 1 Correct', '')).strip().lower() == 'yes': corr_opt = f"A. {row['Option 1 Text']}"
-        elif str(row.get('Option 2 Correct', '')).strip().lower() == 'yes': corr_opt = f"B. {row['Option 2 Text']}"
-        elif str(row.get('Option 3 Correct', '')).strip().lower() == 'yes': corr_opt = f"C. {row['Option 3 Text']}"
-        elif str(row.get('Option 4 Correct', '')).strip().lower() == 'yes': corr_opt = f"D. {row['Option 4 Text']}"
+        user_ans = st.session_state.user_answers.get(idx, [])
+        if isinstance(user_ans, str): user_ans = [user_ans]
+        
+        correct_opts = []
+        if str(row.get('Option 1 Correct', '')).strip().lower() == 'yes': correct_opts.append(row['Option 1 Text'])
+        if str(row.get('Option 2 Correct', '')).strip().lower() == 'yes': correct_opts.append(row['Option 2 Text'])
+        if str(row.get('Option 3 Correct', '')).strip().lower() == 'yes': correct_opts.append(row['Option 3 Text'])
+        if str(row.get('Option 4 Correct', '')).strip().lower() == 'yes': correct_opts.append(row['Option 4 Text'])
 
-        clean_user = user_ans[3:].strip() if user_ans != "Unanswered" else "Unanswered"
-        clean_corr = corr_opt[3:].strip()
-        is_corr = (clean_user == clean_corr)
+        is_corr = (sorted(user_ans) == sorted(correct_opts)) and len(user_ans) > 0
+        
+        display_user_ans = " | ".join(user_ans) if user_ans else "Unanswered"
+        display_corr_opt = " | ".join(correct_opts)
 
-        # HTML Rendering for Exact Pastel Colors
         if is_corr:
             bg_color = "#E6F4EA"
             border_color = "#CEEAD6"
             text_color = "#137333"
             status_text = "Correct"
-            
-            html_card = f'''
-            <div style="background-color: {bg_color}; border: 1px solid {border_color}; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
-                <h4 style="color: {text_color}; margin-top: 0; margin-bottom: 12px; font-size: 16px; font-weight: 700;">Item {idx+1}: {status_text}</h4>
-                <p style="font-weight: 600; color: #202124; font-size: 16px; margin-bottom: 16px;">{row['Question Text']}</p>
-                <p style="margin-bottom: 6px; color: {text_color}; font-size: 15px;"><b>Candidate Selection:</b> {user_ans}</p>
-                <p style="margin-bottom: 16px; color: {text_color}; font-size: 15px;"><b>Correct Selection:</b> {corr_opt}</p>
-                <div style="background-color: rgba(255,255,255,0.7); padding: 14px; border-radius: 6px; color: #3C4043; font-size: 15px; border-left: 4px solid {text_color};">
-                    <b>Rationale:</b> {row['Question feedback']}
-                </div>
-            </div>
-            '''
         else:
             bg_color = "#FCE8E6"
             border_color = "#FAD2CF"
-            wrong_color = "#C5221F"
-            right_color = "#137333"
-            status_text = "Review"
+            text_color = "#C5221F"
+            status_text = "Review Required"
             
-            html_card = f'''
-            <div style="background-color: {bg_color}; border: 1px solid {border_color}; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
-                <h4 style="color: {wrong_color}; margin-top: 0; margin-bottom: 12px; font-size: 16px; font-weight: 700;">Item {idx+1}: {status_text}</h4>
-                <p style="font-weight: 600; color: #202124; font-size: 16px; margin-bottom: 16px;">{row['Question Text']}</p>
-                <p style="margin-bottom: 6px; color: {wrong_color}; font-size: 15px;"><b>Candidate Selection:</b> {user_ans}</p>
-                <p style="margin-bottom: 16px; color: {right_color}; font-size: 15px;"><b>Correct Selection:</b> {corr_opt}</p>
-                <div style="background-color: rgba(255,255,255,0.7); padding: 14px; border-radius: 6px; color: #3C4043; font-size: 15px; border-left: 4px solid {right_color};">
-                    <b>Rationale:</b> {row['Question feedback']}
-                </div>
+        html_card = f'''
+        <div style="background-color: {bg_color}; border: 1px solid {border_color}; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
+            <h4 style="color: {text_color}; margin-top: 0; margin-bottom: 12px; font-size: 16px; font-weight: 700;">Item {idx+1}: {status_text}</h4>
+            <p style="font-weight: 600; color: #202124; font-size: 16px; margin-bottom: 16px;">{row['Question Text']}</p>
+            <p style="margin-bottom: 6px; color: {text_color}; font-size: 15px;"><b>Candidate Selection:</b> {display_user_ans}</p>
+            <p style="margin-bottom: 16px; color: {'#137333' if not is_corr else text_color}; font-size: 15px;"><b>Correct Selection:</b> {display_corr_opt}</p>
+            <div style="background-color: rgba(255,255,255,0.7); padding: 14px; border-radius: 6px; color: #3C4043; font-size: 15px; border-left: 4px solid {'#137333' if not is_corr else text_color};">
+                <b>Rationale:</b> {row['Question feedback']}
             </div>
-            '''
-            
+        </div>
+        '''
         st.markdown(html_card, unsafe_allow_html=True)
 
     st.divider()
