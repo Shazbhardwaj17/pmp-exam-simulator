@@ -3,3 +3,4 @@ pandas
 openpyxl
 plotly
 streamlit-autorefresh
+psycopg2-binary
