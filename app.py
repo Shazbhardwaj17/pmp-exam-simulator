@@ -19,7 +19,10 @@ st.markdown("""
     div[data-testid="stButton"] button[kind="primary"]:hover { background-color: #1D4ED8 !important; }
     .course-card { background: white; border: 1px solid #E5E7EB; border-radius: 8px; padding: 24px; height: 100%; transition: transform 0.2s; margin-bottom: 15px; }
     .course-card:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.05); }
-    .stRadio > label, .stCheckbox > label { font-size: 17px !important; font-weight: 500 !important; color: #374151 !important; }
+    
+    /* Explicitly target Streamlit radio and checkbox text labels */
+    .stRadio label p, .stCheckbox label p, .stRadio span, .stCheckbox span { font-size: 18px !important; font-weight: 500 !important; color: #374151 !important; }
+    
     .pass-rule { font-size: 13px; margin-bottom: 4px; }
     .rule-pass { color: #10B981; font-weight: 600; }
     .rule-fail { color: #6B7280; }
@@ -247,7 +250,7 @@ elif st.session_state.page == "live_exam":
     if st.sidebar.button("Exit Exam", use_container_width=True): st.session_state.page = "dashboard"; st.rerun()
 
     row = df_exam.iloc[idx]
-    st.markdown(f"<div style='background:white; padding:30px; border-radius:8px; border:1px solid #E5E7EB;'><h4 style='color:#111827; font-size:16px; margin-bottom:20px;'>{row['Question Text']}</h4>", unsafe_allow_html=True)
+    st.markdown(f"<div style='background:white; padding:30px; border-radius:8px; border:1px solid #E5E7EB;'><h4 style='color:#111827; font-size:18px; margin-bottom:20px;'>{row['Question Text']}</h4>", unsafe_allow_html=True)
     
     opts = [str(row['Option 1 Text']), str(row['Option 2 Text']), str(row['Option 3 Text']), str(row['Option 4 Text'])]
     correct_cols = [str(row.get(f'Option {i} Correct', '')).strip().lower() for i in range(1, 5)]
@@ -258,7 +261,7 @@ elif st.session_state.page == "live_exam":
         current_selections = st.session_state.answers.get(idx, [])
         new_selections = []
         for i, opt in enumerate(opts):
-            if st.checkbox(opt, value=(opt in current_selections), key=f"q_{idx}_opt_{i}"): new_selections.append(opt)
+            if st.checkbox(opt, value=(opt in current_selections), key=f"q_{idx}_opt_{i} पुत्री"): new_selections.append(opt)
         st.session_state.answers[idx] = new_selections
         if len(new_selections) > 2: st.warning("⚠️ You have selected more than 2 options.")
     else:
@@ -402,7 +405,7 @@ elif st.session_state.page == "review_exam":
     user_ans_str = " | ".join(user_ans) if isinstance(user_ans, list) else str(user_ans)
     corr_ans_str = " | ".join(correct_answers)
     
-    st.markdown(f"<div style='background:white; padding:30px; border-radius:8px; border:1px solid #E5E7EB;'><h4 style='color:#111827; font-size:16px; margin-bottom:20px;'>{row['Question Text']}</h4>", unsafe_allow_html=True)
+    st.markdown(f"<div style='background:white; padding:30px; border-radius:8px; border:1px solid #E5E7EB;'><h4 style='color:#111827; font-size:18px; margin-bottom:20px;'>{row['Question Text']}</h4>", unsafe_allow_html=True)
     st.markdown(f"<div style='margin-bottom: 10px;'><strong>Your Answer:</strong> <span style='color:{ans_color}; font-weight:600;'>{user_ans_str}</span></div>", unsafe_allow_html=True)
     st.markdown(f"<div style='margin-bottom: 20px;'><strong>Correct Answer:</strong> <span style='color:#10B981; font-weight:600;'>{corr_ans_str}</span></div>", unsafe_allow_html=True)
     
