@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-import sqlite3
+import psycopg2
 import re
 import hashlib
 import time
@@ -14,21 +14,15 @@ st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
     html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; background-color: #F9FAFB !important; }
-    
     div[data-testid="stButton"] button { border-radius: 6px !important; font-weight: 600 !important; transition: all 0.2s; }
     div[data-testid="stButton"] button[kind="primary"] { background-color: #2563EB !important; color: white !important; border: none !important; }
     div[data-testid="stButton"] button[kind="primary"]:hover { background-color: #1D4ED8 !important; }
-    
     .course-card { background: white; border: 1px solid #E5E7EB; border-radius: 8px; padding: 24px; height: 100%; transition: transform 0.2s; margin-bottom: 15px; }
     .course-card:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.05); }
-    
-    .stRadio > label, .stCheckbox > label { font-size: 16px !important; font-weight: 500 !important; color: #374151 !important; }
-    
+    .stRadio > label, .stCheckbox > label { font-size: 17px !important; font-weight: 500 !important; color: #374151 !important; }
     .pass-rule { font-size: 13px; margin-bottom: 4px; }
     .rule-pass { color: #10B981; font-weight: 600; }
     .rule-fail { color: #6B7280; }
-    
-    /* PMP Report Card CSS */
     .pmp-report { background: white; padding: 30px; border-radius: 8px; border: 1px solid #E5E7EB; margin-top: 20px; }
     .pmp-grade { font-size: 24px; font-weight: 700; }
     .grade-pass { color: #10B981; }
@@ -41,19 +35,12 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 2. SQLITE DATABASE SETUP ---
-conn = sqlite3.connect('pmp_portal.db', check_same_thread=False)
-c = conn.cursor()
-c.execute('''CREATE TABLE IF NOT EXISTS users (email TEXT PRIMARY KEY, first_name TEXT, last_name TEXT, password_hash TEXT, is_premium INTEGER DEFAULT 0)''')
-c.execute('''CREATE TABLE IF NOT EXISTS exam_results (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT, exam_name TEXT, score_percent REAL, time_taken_sec INTEGER, domains_json TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP, answers_json TEXT)''')
+# --- 2. SUPABASE POSTGRESQL SETUP ---
+@st.cache_resource
+def init_connection():
+    return psycopg2.connect(st.secrets["DATABASE_URL"])
 
-# Safely upgrade existing users table for the Paywall
-try:
-    c.execute("ALTER TABLE users ADD COLUMN is_premium INTEGER DEFAULT 0")
-    conn.commit()
-except sqlite3.OperationalError:
-    pass 
-conn.commit()
+conn = init_connection()
 
 def hash_pass(password): return hashlib.sha256(password.encode()).hexdigest()
 
@@ -85,15 +72,10 @@ def inject_js_timer(minutes, exam_name):
     <script>
         var examKey = 'pmp_timer_v2_{safe_name}';
         var endTime = sessionStorage.getItem(examKey);
-        if (!endTime) {{ 
-            endTime = new Date().getTime() + ({minutes} * 60000); 
-            sessionStorage.setItem(examKey, endTime); 
-        }}
+        if (!endTime) {{ endTime = new Date().getTime() + ({minutes} * 60000); sessionStorage.setItem(examKey, endTime); }}
         var x = setInterval(function() {{
             var now = new Date().getTime(), distance = endTime - now;
-            var h = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)), 
-                m = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60)), 
-                s = Math.floor((distance % (1000 * 60)) / 1000);
+            var h = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)), m = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60)), s = Math.floor((distance % (1000 * 60)) / 1000);
             document.getElementById("time").innerHTML = (h<10?"0"+h:h) + ":" + (m<10?"0"+m:m) + ":" + (s<10?"0"+s:s);
             if (distance < 0) {{ clearInterval(x); document.getElementById("time").innerHTML = "00:00:00"; document.getElementById("time").style.color = "#DC2626"; }}
         }}, 1000);
@@ -111,7 +93,6 @@ if "review_answers" not in st.session_state: st.session_state.review_answers = {
 # --- 6. PAGE: AUTHENTICATION ---
 if st.session_state.page == "auth":
     st.markdown("<h1 style='text-align: center; color: #111827; margin-bottom: 40px;'>PMP Elite Simulator</h1>", unsafe_allow_html=True)
-    
     _, col2, _ = st.columns([1, 1.5, 1])
     with col2:
         if st.session_state.auth_mode == "register":
@@ -137,10 +118,13 @@ if st.session_state.page == "auth":
                 if not (has_len and has_upper and has_lower and has_num and has_spec): st.error("Please meet all password requirements.")
                 else:
                     try:
-                        c.execute("INSERT INTO users (email, first_name, last_name, password_hash, is_premium) VALUES (?, ?, ?, ?, 0)", (email.lower(), name.split()[0], name.split()[-1] if len(name.split())>1 else "", hash_pass(password)))
+                        c = conn.cursor()
+                        c.execute("INSERT INTO users (email, first_name, last_name, password_hash, is_premium) VALUES (%s, %s, %s, %s, 0)", (email.lower(), name.split()[0], name.split()[-1] if len(name.split())>1 else "", hash_pass(password)))
                         conn.commit()
                         st.session_state.auth_mode = "login"; st.success("Registered! Please log in."); st.rerun()
-                    except sqlite3.IntegrityError: st.error("Email already registered.")
+                    except psycopg2.IntegrityError: 
+                        conn.rollback()
+                        st.error("Email already registered.")
             if st.button("Already have an account? Sign in", use_container_width=True): st.session_state.auth_mode = "login"; st.rerun()
 
         elif st.session_state.auth_mode == "login":
@@ -148,7 +132,8 @@ if st.session_state.page == "auth":
             email = st.text_input("E-mail *")
             password = st.text_input("Password *", type="password")
             if st.button("Sign in", type="primary", use_container_width=True):
-                c.execute("SELECT first_name, last_name, is_premium FROM users WHERE email=? AND password_hash=?", (email.lower(), hash_pass(password)))
+                c = conn.cursor()
+                c.execute("SELECT first_name, last_name, is_premium FROM users WHERE email=%s AND password_hash=%s", (email.lower(), hash_pass(password)))
                 user = c.fetchone()
                 if user:
                     st.session_state.student_name, st.session_state.student_email = f"{user[0]} {user[1]}", email.lower()
@@ -186,7 +171,8 @@ elif st.session_state.page == "dashboard":
         _, btn_col, _ = st.columns([1, 1, 1])
         with btn_col:
             if st.button(f"Upgrade Now (Simulate Payment)", key=f"pay_{title}", type="primary", use_container_width=True):
-                c.execute("UPDATE users SET is_premium=1 WHERE email=?", (st.session_state.student_email,))
+                c = conn.cursor()
+                c.execute("UPDATE users SET is_premium=1 WHERE email=%s", (st.session_state.student_email,))
                 conn.commit()
                 st.session_state.is_premium = True
                 st.success("Payment Successful! Unlocked.")
@@ -197,10 +183,10 @@ elif st.session_state.page == "dashboard":
     
     with t1:
         st.markdown("### Recent Exam Performance")
-        if not st.session_state.is_premium:
-            paywall_block("Advanced Analytics")
+        if not st.session_state.is_premium: paywall_block("Advanced Analytics")
         else:
-            c.execute("SELECT id, exam_name, score_percent, time_taken_sec, timestamp, answers_json FROM exam_results WHERE email=? ORDER BY timestamp DESC", (st.session_state.student_email,))
+            c = conn.cursor()
+            c.execute("SELECT id, exam_name, score_percent, time_taken_sec, timestamp, answers_json FROM exam_results WHERE email=%s ORDER BY timestamp DESC", (st.session_state.student_email,))
             history = c.fetchall()
             if history:
                 for row in history:
@@ -209,7 +195,7 @@ elif st.session_state.page == "dashboard":
                     hc1, hc2 = st.columns([4, 1])
                     with hc1:
                         st.markdown(f"""<div style="background:white; padding:15px; border-radius:8px; border:1px solid #E5E7EB; display:flex; justify-content:space-between; align-items:center;">
-                            <div><strong>{row[1]}</strong><br><span style="font-size:12px; color:#6B7280;">Time: {mins} minutes | Date: {row[4][:10]}</span></div>
+                            <div><strong>{row[1]}</strong><br><span style="font-size:12px; color:#6B7280;">Time: {mins} minutes | Date: {str(row[4])[:10]}</span></div>
                             <div style="font-size:20px; font-weight:700; color:{color};">{score:.1f}%</div></div>""", unsafe_allow_html=True)
                     with hc2:
                         st.markdown("<div style='padding-top:15px;'></div>", unsafe_allow_html=True)
@@ -227,8 +213,7 @@ elif st.session_state.page == "dashboard":
                 
     with t3:
         st.markdown("### Domain Sprints")
-        if not st.session_state.is_premium:
-            paywall_block("Targeted Domain Sprints")
+        if not st.session_state.is_premium: paywall_block("Targeted Domain Sprints")
         else:
             sprint_sheets = sorted([s for s in available_sheets if "Sprint" in s])
             c1, c2, c3 = st.columns(3)
@@ -237,12 +222,10 @@ elif st.session_state.page == "dashboard":
                 
     with t4:
         st.markdown("### Full-Length Mocks")
-        if not st.session_state.is_premium:
-            paywall_block("Full-Length Mock Exams")
+        if not st.session_state.is_premium: paywall_block("Full-Length Mock Exams")
         else:
             full_mocks = sorted([s for s in available_sheets if "Full_Mock" in s])
             if "Free_Mock_Test" in available_sheets: full_mocks.append("Free_Mock_Test")
-            
             c1, c2, c3 = st.columns(3)
             for i, sheet in enumerate(full_mocks):
                 with [c1, c2, c3][i % 3]: 
@@ -264,7 +247,7 @@ elif st.session_state.page == "live_exam":
     if st.sidebar.button("Exit Exam", use_container_width=True): st.session_state.page = "dashboard"; st.rerun()
 
     row = df_exam.iloc[idx]
-    st.markdown(f"<div style='background:white; padding:30px; border-radius:8px; border:1px solid #E5E7EB;'><h4 style='color:#111827; margin-bottom:20px;'>{row['Question Text']}</h4>", unsafe_allow_html=True)
+    st.markdown(f"<div style='background:white; padding:30px; border-radius:8px; border:1px solid #E5E7EB;'><h4 style='color:#111827; font-size:16px; margin-bottom:20px;'>{row['Question Text']}</h4>", unsafe_allow_html=True)
     
     opts = [str(row['Option 1 Text']), str(row['Option 2 Text']), str(row['Option 3 Text']), str(row['Option 4 Text'])]
     correct_cols = [str(row.get(f'Option {i} Correct', '')).strip().lower() for i in range(1, 5)]
@@ -305,23 +288,18 @@ elif st.session_state.page == "live_exam":
 elif st.session_state.page == "pre_submit_review":
     df_exam = st.session_state.active_exam
     total_q = len(df_exam)
-    
     st.markdown("<h2>Exam Review</h2>", unsafe_allow_html=True)
     st.info("Please review your flagged and unanswered questions before final submission.")
     
     unanswered_count = sum(1 for i in range(total_q) if st.session_state.answers.get(i) is None or (isinstance(st.session_state.answers.get(i), list) and len(st.session_state.answers.get(i)) == 0))
-    flagged_count = len(st.session_state.flagged)
-    
-    st.markdown(f"**Unanswered:** <span style='color:#EF4444;'>{unanswered_count}</span> &nbsp;&nbsp;|&nbsp;&nbsp; **Flagged:** <span style='color:#F59E0B;'>{flagged_count}</span>", unsafe_allow_html=True)
+    st.markdown(f"**Unanswered:** <span style='color:#EF4444;'>{unanswered_count}</span> &nbsp;&nbsp;|&nbsp;&nbsp; **Flagged:** <span style='color:#F59E0B;'>{len(st.session_state.flagged)}</span>", unsafe_allow_html=True)
     st.markdown("<hr style='margin: 20px 0;'>", unsafe_allow_html=True)
     
     cols = st.columns(10)
     for i in range(total_q):
         marker = " ⚑" if i in st.session_state.flagged else " ❓" if st.session_state.answers.get(i) is None or (isinstance(st.session_state.answers.get(i), list) and len(st.session_state.answers.get(i)) == 0) else ""
         if cols[i % 10].button(f"Q{i+1}{marker}", key=f"jump_{i}", use_container_width=True):
-            st.session_state.current_q = i
-            st.session_state.page = "live_exam"
-            st.rerun()
+            st.session_state.current_q, st.session_state.page = i, "live_exam"; st.rerun()
             
     st.markdown("<hr style='margin: 40px 0 20px 0; border-top: 1px solid #E5E7EB;'>", unsafe_allow_html=True)
     
@@ -339,20 +317,19 @@ elif st.session_state.page == "pre_submit_review":
                 domain = str(q_row.get('Domain', 'Process'))
                 d_key = 'Business Environment' if 'business' in domain.lower() else 'People' if 'people' in domain.lower() else 'Process'
                 stats[d_key]['tot'] += 1
-                
                 correct_answers = [str(q_row[f'Option {j} Text']) for j in range(1, 5) if str(q_row.get(f'Option {j} Correct', '')).strip().lower() in ['yes', 'true', '1']]
                 user_ans = st.session_state.answers.get(i)
                 is_correct = set(user_ans) == set(correct_answers) if isinstance(user_ans, list) else user_ans in correct_answers
-                
                 if is_correct:
                     total_correct += 1
                     stats[d_key]['cor'] += 1
             
             score_pct = (total_correct / total_q) * 100 if total_q > 0 else 0
             st.session_state.final_score, st.session_state.final_stats, st.session_state.time_taken = score_pct, stats, time_taken
-            
             safe_answers = {str(k): v for k, v in st.session_state.answers.items()}
-            c.execute("INSERT INTO exam_results (email, exam_name, score_percent, time_taken_sec, domains_json, answers_json) VALUES (?, ?, ?, ?, ?, ?)", 
+            
+            c = conn.cursor()
+            c.execute("INSERT INTO exam_results (email, exam_name, score_percent, time_taken_sec, domains_json, answers_json) VALUES (%s, %s, %s, %s, %s, %s)", 
                       (st.session_state.student_email, st.session_state.exam_title, score_pct, time_taken, json.dumps(stats), json.dumps(safe_answers)))
             conn.commit()
             
@@ -366,11 +343,10 @@ elif st.session_state.page == "results":
     with c1: 
         if st.button("← Return to Dashboard"): st.session_state.page = "dashboard"; st.rerun()
     with c2:
-        if st.button("Review Questions & Feedback →", type="primary"): st.session_state.review_q_idx = 0; st.session_state.page = "review_exam"; st.rerun()
+        if st.button("Review Questions & Feedback →", type="primary"): st.session_state.review_q_idx, st.session_state.page = 0, "review_exam"; st.rerun()
     
-    score = st.session_state.final_score
+    score, (mins, secs) = st.session_state.final_score, divmod(st.session_state.time_taken, 60)
     status, status_class = ("PASS", "grade-pass") if score >= 70 else ("FAIL", "grade-fail")
-    mins, secs = divmod(st.session_state.time_taken, 60)
     
     st.markdown(f"""
     <div class="pmp-report">
@@ -426,15 +402,14 @@ elif st.session_state.page == "review_exam":
     user_ans_str = " | ".join(user_ans) if isinstance(user_ans, list) else str(user_ans)
     corr_ans_str = " | ".join(correct_answers)
     
-    st.markdown(f"<div style='background:white; padding:30px; border-radius:8px; border:1px solid #E5E7EB;'><h4 style='color:#111827; margin-bottom:20px;'>{row['Question Text']}</h4>", unsafe_allow_html=True)
-    
+    st.markdown(f"<div style='background:white; padding:30px; border-radius:8px; border:1px solid #E5E7EB;'><h4 style='color:#111827; font-size:16px; margin-bottom:20px;'>{row['Question Text']}</h4>", unsafe_allow_html=True)
     st.markdown(f"<div style='margin-bottom: 10px;'><strong>Your Answer:</strong> <span style='color:{ans_color}; font-weight:600;'>{user_ans_str}</span></div>", unsafe_allow_html=True)
     st.markdown(f"<div style='margin-bottom: 20px;'><strong>Correct Answer:</strong> <span style='color:#10B981; font-weight:600;'>{corr_ans_str}</span></div>", unsafe_allow_html=True)
     
     st.info(f"**Explanation:**\n\n{row.get('Question feedback', 'No explanation provided.')}")
     st.markdown("<hr style='margin: 40px 0 20px 0; border-top: 1px solid #E5E7EB;'>", unsafe_allow_html=True)
     
-    n1, n2, n3 = st.columns([1, 1.5, 1])
+    n1, _, n3 = st.columns([1, 1.5, 1])
     with n1:
         if idx > 0 and st.button("← Previous", use_container_width=True): st.session_state.review_q_idx -= 1; st.rerun()
     with n3:
