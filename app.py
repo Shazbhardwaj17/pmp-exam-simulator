@@ -6,24 +6,51 @@ import hashlib
 import time
 import json
 import streamlit.components.v1 as components
+import math
 
 # --- 1. PAGE CONFIG & CORE CSS ---
 st.set_page_config(page_title="PMP Simulator Elite", layout="wide", initial_sidebar_state="expanded")
 
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-    html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; background-color: #F9FAFB !important; }
-    div[data-testid="stButton"] button { border-radius: 6px !important; font-weight: 600 !important; transition: all 0.2s; }
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+    
+    html, body, [class*="css"] { 
+        font-family: 'Inter', sans-serif !important; 
+        background-color: #F9FAFB !important; 
+    }
+    
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    
+    div[data-testid="stButton"] button, a[data-testid="stLinkButton"] { border-radius: 6px !important; font-weight: 600 !important; transition: all 0.2s; }
     div[data-testid="stButton"] button[kind="primary"] { background-color: #2563EB !important; color: white !important; border: none !important; }
     div[data-testid="stButton"] button[kind="primary"]:hover { background-color: #1D4ED8 !important; }
-    .course-card { background: white; border: 1px solid #E5E7EB; border-radius: 8px; padding: 24px; height: 100%; transition: transform 0.2s; margin-bottom: 15px; }
-    .course-card:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.05); }
     
-    /* Options font size and spacing */
-    .stRadio label p, .stCheckbox label p, .stRadio span, .stCheckbox span { font-size: 17px !important; font-weight: 500 !important; color: #374151 !important; line-height: 1.6 !important; }
-    div[role="radiogroup"] > label { margin-bottom: 15px !important; }
-    div[data-testid="stCheckbox"] { margin-bottom: 15px !important; }
+    .course-card { background: white; border: 1px solid #E5E7EB; border-radius: 8px; padding: 24px; height: 100%; transition: transform 0.2s; margin-bottom: 15px; }
+    .course-card:hover { transform: translateY(-2px); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
+    
+    div[role="radiogroup"] > label, div[data-testid="stCheckbox"] {
+        border: 1px solid #D1D5DB !important;
+        border-radius: 8px !important;
+        padding: 14px 16px !important;
+        margin-bottom: 12px !important;
+        background-color: #FFFFFF !important;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    
+    div[role="radiogroup"] > label:hover, div[data-testid="stCheckbox"]:hover {
+        border-color: #9CA3AF !important;
+        background-color: #F9FAFB !important;
+    }
+    
+    .stRadio label p, .stCheckbox label p, .stRadio span, .stCheckbox span { 
+        font-size: 15px !important; 
+        font-weight: 400 !important; 
+        color: #111827 !important; 
+        line-height: 1.5 !important;
+    }
     
     .pass-rule { font-size: 13px; margin-bottom: 4px; }
     .rule-pass { color: #10B981; font-weight: 600; }
@@ -49,20 +76,41 @@ conn = init_connection()
 
 def hash_pass(password): return hashlib.sha256(password.encode()).hexdigest()
 
-# --- 3. DATA PIPELINE ---
+# --- 3. DATA SANITIZATION & PIPELINE ---
+def clean_pmp_text(text):
+    if not isinstance(text, str): return text
+    text = re.sub(r'\s*(?:[A-E]-\d(?:,\s*)?){2,}$', '', text)
+    text = re.sub(r'^(?:[A-E]-\d|[A-E])[\.\:\)]\s*', '', text)
+    text = re.sub(r'\s+(?:[A-E]-\d|[A-E])[\.\:\)]\s*', ' | ', text)
+    return text.strip()
+
 @st.cache_data
 def load_question_bank():
     try:
         all_tabs = pd.read_excel("pmp_question_bank_v2.xlsx", sheet_name=None)
         df_list = []
         for sheet_name, sheet_df in all_tabs.items():
-            sheet_df.columns = sheet_df.columns.str.strip()
+            col_map = {}
+            for c in sheet_df.columns:
+                c_clean = str(c).strip()
+                c_lower = c_clean.lower()
+                if c_lower.startswith('option') and c_lower.endswith('correct'): col_map[c] = c_clean.title()
+                elif c_lower.startswith('option') and c_lower.endswith('text'): col_map[c] = c_clean.title()
+                elif c_lower == 'question text': col_map[c] = 'Question Text'
+                elif 'feedback' in c_lower or 'explanation' in c_lower or 'rationale' in c_lower: col_map[c] = 'Explanation'
+                elif c_lower == 'domain': col_map[c] = 'Domain'
+                else: col_map[c] = c_clean
+            
+            sheet_df.rename(columns=col_map, inplace=True)
+            
+            for col in ['Question Text', 'Option 1 Text', 'Option 2 Text', 'Option 3 Text', 'Option 4 Text']:
+                if col in sheet_df.columns:
+                    sheet_df[col] = sheet_df[col].apply(clean_pmp_text)
+                    
             sheet_df['Source_Sheet'] = sheet_name
-            
-            # Shuffles the questions reliably to break up multiple-choice clusters
             sheet_df = sheet_df.sample(frac=1, random_state=42).reset_index(drop=True)
-            
             df_list.append(sheet_df)
+            
         return pd.concat(df_list, ignore_index=True).dropna(subset=['Question Text'])
     except Exception: return None
 
@@ -177,16 +225,22 @@ elif st.session_state.page == "dashboard":
             <p style="color:#6B7280; font-size:16px; margin-bottom:25px;">Upgrade your account to unlock {title} and accelerate your PMP preparation.</p>
         </div>
         """, unsafe_allow_html=True)
-        _, btn_col, _ = st.columns([1, 1, 1])
-        with btn_col:
-            if st.button(f"Upgrade Now (Simulate Payment)", key=f"pay_{title}", type="primary", use_container_width=True):
+        _, c1, c2, _ = st.columns([1, 1.5, 1.5, 1])
+        with c1:
+            razorpay_url = f"https://pages.razorpay.com/pl_YOUR_LINK_ID?email={st.session_state.student_email}"
+            st.link_button("Pay via Razorpay", razorpay_url, type="primary", use_container_width=True)
+        with c2:
+            if st.button("I have paid (Refresh Access)", use_container_width=True):
                 c = conn.cursor()
-                c.execute("UPDATE users SET is_premium=1 WHERE email=%s", (st.session_state.student_email,))
-                conn.commit()
-                st.session_state.is_premium = True
-                st.success("Payment Successful! Unlocked.")
-                time.sleep(1)
-                st.rerun()
+                c.execute("SELECT is_premium FROM users WHERE email=%s", (st.session_state.student_email,))
+                user_status = c.fetchone()
+                if user_status and user_status[0] == 1:
+                    st.session_state.is_premium = True
+                    st.success("Payment verified! Unlocked.")
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.error("Payment not registered yet. Please wait 10 seconds and click again.")
 
     t1, t2, t3, t4 = st.tabs(["My Analytics", "Sample Tests", "Domain Sprints", "Full Mocks"])
     
@@ -256,20 +310,41 @@ elif st.session_state.page == "live_exam":
     if st.sidebar.button("Exit Exam", use_container_width=True): st.session_state.page = "dashboard"; st.rerun()
 
     row = df_exam.iloc[idx]
-    st.markdown(f"<div style='background:white; padding:30px; border-radius:8px; border:1px solid #E5E7EB;'><h4 style='color:#111827; font-size:20px; margin-bottom:20px;'>{row['Question Text']}</h4>", unsafe_allow_html=True)
+    
+    st.markdown(f"<div style='background:white; padding:32px; border-radius:12px; border:1px solid #E5E7EB; box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-bottom:24px;'><p style='color:#111827; font-size:21px; font-weight:600; line-height:1.6; margin-bottom:0;'>{row['Question Text']}</p></div>", unsafe_allow_html=True)
     
     opts = [str(row['Option 1 Text']), str(row['Option 2 Text']), str(row['Option 3 Text']), str(row['Option 4 Text'])]
     correct_cols = [str(row.get(f'Option {i} Correct', '')).strip().lower() for i in range(1, 5)]
     num_correct = sum(1 for x in correct_cols if x in ['yes', 'true', '1', 'correct'])
     
-    if num_correct == 2:
-        st.markdown("<p style='color:#6B7280; font-size:14px; font-weight:600;'>Select exactly TWO options:</p>", unsafe_allow_html=True)
+    q_text_lower = str(row['Question Text']).lower()
+    has_bundled_options = any(' | ' in opt for opt in opts)
+    
+    multi_match = re.search(r'\b(choose|select|which)\s+(two|three|2|3)\b', q_text_lower)
+    
+    if has_bundled_options:
+        is_multiple = False
+        limit = 1
+    elif num_correct > 1:
+        is_multiple = True
+        limit = num_correct
+    elif multi_match:
+        is_multiple = True
+        num_str = multi_match.group(2)
+        limit = 3 if num_str in ['three', '3'] else 2
+    else:
+        is_multiple = False
+        limit = 1
+        
+    if is_multiple:
+        st.markdown(f"<p style='color:#6B7280; font-size:14px; font-weight:600;'>Select {limit} options:</p>", unsafe_allow_html=True)
         current_selections = st.session_state.answers.get(idx, [])
         new_selections = []
         for i, opt in enumerate(opts):
             if st.checkbox(opt, value=(opt in current_selections), key=f"q_{idx}_opt_{i}"): new_selections.append(opt)
         st.session_state.answers[idx] = new_selections
-        if len(new_selections) > 2: st.warning("⚠️ You have selected more than 2 options.")
+        if len(new_selections) > limit: 
+            st.warning(f"⚠️ You should only select {limit} options.")
     else:
         current_selection = st.session_state.answers.get(idx, None)
         default_idx = opts.index(current_selection) if current_selection in opts else None
@@ -326,7 +401,7 @@ elif st.session_state.page == "pre_submit_review":
                 domain = str(q_row.get('Domain', 'Process'))
                 d_key = 'Business Environment' if 'business' in domain.lower() else 'People' if 'people' in domain.lower() else 'Process'
                 stats[d_key]['tot'] += 1
-                correct_answers = [str(q_row[f'Option {j} Text']) for j in range(1, 5) if str(q_row.get(f'Option {j} Correct', '')).strip().lower() in ['yes', 'true', '1']]
+                correct_answers = [str(q_row[f'Option {j} Text']) for j in range(1, 5) if str(q_row.get(f'Option {j} Correct', '')).strip().lower() in ['yes', 'true', '1', 'correct']]
                 user_ans = st.session_state.answers.get(i)
                 is_correct = set(user_ans) == set(correct_answers) if isinstance(user_ans, list) else user_ans in correct_answers
                 if is_correct:
@@ -404,18 +479,23 @@ elif st.session_state.page == "review_exam":
     user_ans = st.session_state.review_answers.get(str(idx), "No Answer Selected")
     if user_ans is None or (isinstance(user_ans, list) and len(user_ans) == 0): user_ans = "No Answer Selected"
     
-    correct_answers = [str(row[f'Option {j} Text']) for j in range(1, 5) if str(row.get(f'Option {j} Correct', '')).strip().lower() in ['yes', 'true', '1']]
+    correct_answers = [str(row[f'Option {j} Text']) for j in range(1, 5) if str(row.get(f'Option {j} Correct', '')).strip().lower() in ['yes', 'true', '1', 'correct']]
     is_correct = set(user_ans) == set(correct_answers) if isinstance(user_ans, list) else user_ans in correct_answers
     ans_color = "#10B981" if is_correct else "#EF4444"
     
     user_ans_str = " | ".join(user_ans) if isinstance(user_ans, list) else str(user_ans)
     corr_ans_str = " | ".join(correct_answers)
     
-    st.markdown(f"<div style='background:white; padding:30px; border-radius:8px; border:1px solid #E5E7EB;'><h4 style='color:#111827; font-size:20px; margin-bottom:20px;'>{row['Question Text']}</h4>", unsafe_allow_html=True)
+    st.markdown(f"<div style='background:white; padding:32px; border-radius:12px; border:1px solid #E5E7EB; box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-bottom:24px;'><p style='color:#111827; font-size:21px; font-weight:600; line-height:1.6; margin-bottom:0;'>{row['Question Text']}</p></div>", unsafe_allow_html=True)
     st.markdown(f"<div style='margin-bottom: 10px;'><strong>Your Answer:</strong> <span style='color:{ans_color}; font-weight:600;'>{user_ans_str}</span></div>", unsafe_allow_html=True)
     st.markdown(f"<div style='margin-bottom: 20px;'><strong>Correct Answer:</strong> <span style='color:#10B981; font-weight:600;'>{corr_ans_str}</span></div>", unsafe_allow_html=True)
     
-    st.info(f"**Explanation:**\n\n{row.get('Question feedback', 'No explanation provided.')}")
+    # Safe retrieval of feedback data 
+    explanation_text = row.get('Explanation', 'No explanation provided.')
+    if pd.isna(explanation_text) or str(explanation_text).strip() == '': 
+        explanation_text = "No explanation provided."
+        
+    st.info(f"**Explanation:**\n\n{explanation_text}")
     st.markdown("<hr style='margin: 40px 0 20px 0; border-top: 1px solid #E5E7EB;'>", unsafe_allow_html=True)
     
     n1, _, n3 = st.columns([1, 1.5, 1])
