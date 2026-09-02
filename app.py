@@ -87,7 +87,7 @@ def clean_pmp_text(text):
 @st.cache_data
 def load_question_bank():
     try:
-        all_tabs = pd.read_excel("pmp_question_bank_v2.xlsx", sheet_name=None)
+        all_tabs = pd.read_excel("pmp_question_bank_v3.xlsx", sheet_name=None)
         df_list = []
         for sheet_name, sheet_df in all_tabs.items():
             col_map = {}
@@ -121,13 +121,13 @@ def get_sheet_from_title(title):
     if title == "Sample Test": return "Bonus_Questions"
     return title.replace(' ', '_')
 
-# --- 4. JS TIMER (Now uses unique Session ID to prevent 00:00 cache locks) ---
-def inject_js_timer(minutes, exam_name, session_id):
-    safe_name = f"{exam_name.replace(' ', '_')}_{session_id}"
+# --- 4. JS TIMER ---
+def inject_js_timer(minutes, exam_name):
+    safe_name = exam_name.replace(" ", "_")
     timer_html = f"""
     <div style="font-size:16px; font-weight:700; color:#111827; padding: 10px 0;">Time Remaining: <span id="time" style="color:#2563EB;">Loading...</span></div>
     <script>
-        var examKey = 'pmp_timer_v3_{safe_name}';
+        var examKey = 'pmp_timer_v2_{safe_name}';
         var endTime = sessionStorage.getItem(examKey);
         if (!endTime) {{ endTime = new Date().getTime() + ({minutes} * 60000); sessionStorage.setItem(examKey, endTime); }}
         var x = setInterval(function() {{
@@ -216,8 +216,6 @@ elif st.session_state.page == "dashboard":
             st.session_state.exam_title, st.session_state.page = title, "live_exam"
             st.session_state.current_q, st.session_state.flagged, st.session_state.answers = 0, set(), {}
             st.session_state.exam_start_time = time.time()
-            # Generate a unique Session ID to prevent browser cache locking the timer at 00:00:00
-            st.session_state.exam_session_id = str(int(time.time()))
             st.rerun()
 
     def paywall_block(title):
@@ -304,10 +302,8 @@ elif st.session_state.page == "live_exam":
     idx = st.session_state.current_q
     
     st.sidebar.markdown(f"**{st.session_state.exam_title}**")
-    
-    # Adaptive Exam Timing (Standard PMI Pace: ~1.277 minutes per question)
-    time_limit = 230 if total_q >= 170 else max(1, math.ceil(total_q * 1.277))
-    inject_js_timer(time_limit, st.session_state.exam_title, st.session_state.get('exam_session_id', 'fallback'))
+    time_limit = 230 if "Mock" in st.session_state.exam_title else 75
+    inject_js_timer(time_limit, st.session_state.exam_title)
     
     st.sidebar.progress((idx) / total_q if total_q > 0 else 0)
     st.sidebar.markdown(f"Question {idx + 1} of {total_q}")
@@ -494,6 +490,7 @@ elif st.session_state.page == "review_exam":
     st.markdown(f"<div style='margin-bottom: 10px;'><strong>Your Answer:</strong> <span style='color:{ans_color}; font-weight:600;'>{user_ans_str}</span></div>", unsafe_allow_html=True)
     st.markdown(f"<div style='margin-bottom: 20px;'><strong>Correct Answer:</strong> <span style='color:#10B981; font-weight:600;'>{corr_ans_str}</span></div>", unsafe_allow_html=True)
     
+    # Safe retrieval of feedback data 
     explanation_text = row.get('Explanation', 'No explanation provided.')
     if pd.isna(explanation_text) or str(explanation_text).strip() == '': 
         explanation_text = "No explanation provided."
