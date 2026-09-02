@@ -87,7 +87,7 @@ def clean_pmp_text(text):
 @st.cache_data
 def load_question_bank():
     try:
-        all_tabs = pd.read_excel("pmp_question_bank_v3.xlsx", sheet_name=None)
+        all_tabs = pd.read_excel("pmp_question_bank_v6.xlsx", sheet_name=None)
         df_list = []
         for sheet_name, sheet_df in all_tabs.items():
             col_map = {}
@@ -300,9 +300,16 @@ elif st.session_state.page == "live_exam":
     df_exam = st.session_state.active_exam
     total_q = len(df_exam)
     idx = st.session_state.current_q
-    
     st.sidebar.markdown(f"**{st.session_state.exam_title}**")
-    time_limit = 230 if "Mock" in st.session_state.exam_title else 75
+    
+    # Custom Timer Logic
+    if st.session_state.exam_title == "Sample Test":
+        time_limit = 15  # Exactly 15 minutes for the Sample Test
+    elif "Mock" in st.session_state.exam_title:
+        time_limit = 230 # 230 minutes for Full Mocks
+    else:
+        time_limit = 75  # 75 minutes for Domain Sprints
+        
     inject_js_timer(time_limit, st.session_state.exam_title)
     
     st.sidebar.progress((idx) / total_q if total_q > 0 else 0)
