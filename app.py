@@ -23,9 +23,9 @@ st.markdown("""
     footer {visibility: hidden;}
     header {visibility: hidden;}
     
-    div[data-testid="stButton"] button, a[data-testid="stLinkButton"] { border-radius: 6px !important; font-weight: 600 !important; transition: all 0.2s; }
-    div[data-testid="stButton"] button[kind="primary"] { background-color: #2563EB !important; color: white !important; border: none !important; }
-    div[data-testid="stButton"] button[kind="primary"]:hover { background-color: #1D4ED8 !important; }
+    div[data-testid="stButton"] button, a[data-testid="stLinkButton"] { border-radius: 6px !important; font-weight: 600 !important; transition: all 0.2s; text-decoration: none !important; }
+    div[data-testid="stButton"] button[kind="primary"], a[data-testid="stLinkButton"] { background-color: #2563EB !important; color: white !important; border: none !important; }
+    div[data-testid="stButton"] button[kind="primary"]:hover, a[data-testid="stLinkButton"]:hover { background-color: #1D4ED8 !important; }
     
     .course-card { background: white; border: 1px solid #E5E7EB; border-radius: 8px; padding: 24px; height: 100%; transition: transform 0.2s; margin-bottom: 15px; }
     .course-card:hover { transform: translateY(-2px); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
@@ -232,13 +232,14 @@ elif st.session_state.page == "dashboard":
     def render_card(sheet_id, title, desc, is_locked=False):
         if is_locked:
             st.markdown(f'''
-            <div class="course-card" style="border: 1px solid #E5E7EB; opacity: 0.85;">
-                <h4>🔒 {title}</h4>
-                <p style="font-size:13px; color:#6B7280; margin-bottom: 8px;">{desc}</p>
-                <span style="background:#FEF3C7; color:#92400E; font-size:11px; font-weight:600; padding:2px 8px; border-radius:4px;">PREMIUM</span>
+            <div class="course-card" style="border: 1px solid #E5E7EB; background: #F9FAFB; opacity: 0.9;">
+                <h4 style="color: #4B5563;">🔒 {title}</h4>
+                <p style="font-size:13px; color:#6B7280; margin-bottom: 15px;">{desc}</p>
+                <div style="background:#E5E7EB; color:#4B5563; font-size:13px; font-weight:600; padding:8px; border-radius:6px; text-align:center;">
+                    Premium Access Required
+                </div>
             </div>
             ''', unsafe_allow_html=True)
-            st.link_button("Unlock (₹699)", razorpay_url, type="primary", use_container_width=True)
         else:
             st.markdown(f'<div class="course-card"><h4>{title}</h4><p style="font-size:13px; color:#6B7280;">{desc}</p></div>', unsafe_allow_html=True)
             if st.button("Launch", key=f"btn_{sheet_id}", type="primary", use_container_width=True):
