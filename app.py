@@ -133,7 +133,9 @@ def get_sheet_from_title(title):
 
 # --- 4. JS TIMER ---
 def inject_js_timer(minutes, exam_name):
-    safe_name = exam_name.replace(" ", "_")
+    # Include the attempt's start time so each new launch gets a fresh key,
+    # instead of reusing a stale/expired countdown from a previous attempt.
+    safe_name = f"{exam_name}_{int(st.session_state.get('exam_start_time', time.time()))}".replace(" ", "_")
     timer_html = f"""
     <div style="font-size:16px; font-weight:700; color:#111827; padding: 10px 0;">Time Remaining: <span id="time" style="color:#2563EB;">Loading...</span></div>
     <script>
