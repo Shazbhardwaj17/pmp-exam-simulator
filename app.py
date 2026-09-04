@@ -63,7 +63,18 @@ st.markdown("""
     .domain-bar-bg { flex-grow: 1; background: #F3F4F6; height: 24px; border-radius: 12px; overflow: hidden; display: flex; position: relative; }
     .domain-marker { position: absolute; height: 100%; border-right: 2px solid white; }
     .block-container { padding-top: 2rem !important; }
-</style>
+@media (max-width: 768px) {
+        .block-container { padding-top: 1rem !important; padding-left: 1rem !important; padding-right: 1rem !important; }
+        .course-card { padding: 16px; margin-bottom: 12px; }
+        h1 { font-size: 24px !important; margin-bottom: 20px !important; }
+        h3 { font-size: 18px !important; }
+        h4 { font-size: 16px !important; }
+        .pmp-report { padding: 15px; }
+        .domain-row { flex-direction: column; align-items: flex-start; margin-bottom: 25px; }
+        .domain-name { width: 100%; margin-bottom: 8px; font-size: 14px; }
+        .domain-bar-bg { width: 100%; }
+        div[role="radiogroup"] > label, div[data-testid="stCheckbox"] { padding: 10px 12px !important; }
+    }</style>
 """, unsafe_allow_html=True)
 
 # --- 2. SUPABASE POSTGRESQL SETUP ---
@@ -137,7 +148,7 @@ def inject_js_timer(minutes, exam_name):
         }}, 1000);
     </script>
     """
-    with st.sidebar: components.html(timer_html, height=40)
+    components.html(timer_html, height=40)
 
 # --- 5. ROBUST STATE INITIALIZATION ---
 default_states = {
@@ -340,7 +351,7 @@ elif st.session_state.page == "live_exam":
     total_q = len(df_exam)
     idx = st.session_state.current_q
     
-    st.sidebar.markdown(f"**{st.session_state.exam_title}**")
+    st.markdown(f"**{st.session_state.exam_title}**")
     
     # Custom Timer Logic
     if st.session_state.exam_title == "Sample Test":
@@ -349,12 +360,19 @@ elif st.session_state.page == "live_exam":
         time_limit = 230
     else:
         time_limit = 75
-        
-    inject_js_timer(time_limit, st.session_state.exam_title)
-    
-    st.sidebar.progress((idx) / total_q if total_q > 0 else 0)
-    st.sidebar.markdown(f"Question {idx + 1} of {total_q}")
-    if st.sidebar.button("Exit Exam", use_container_width=True): st.session_state.page = "dashboard"; st.rerun()
+
+    # --- MAIN SCREEN TOP BAR (visible on mobile, since the sidebar is hidden) ---
+    top1, top2, top3 = st.columns([2, 2, 1])
+    with top1:
+        inject_js_timer(time_limit, st.session_state.exam_title)
+    with top2:
+        st.progress((idx) / total_q if total_q > 0 else 0)
+        st.markdown(f"<div style='text-align:center; font-size:13px; color:#6B7280; margin-top:5px;'>Question {idx + 1} of {total_q}</div>", unsafe_allow_html=True)
+    with top3:
+        if st.button("Exit Exam", use_container_width=True):
+            st.session_state.page = "dashboard"
+            st.rerun()
+    # -------------------------------------------------------------------------
 
     row = df_exam.iloc[idx]
     
