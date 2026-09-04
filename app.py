@@ -6,7 +6,6 @@ import hashlib
 import time
 import json
 import streamlit.components.v1 as components
-import math
 
 # --- 1. PAGE CONFIG & CORE CSS ---
 st.set_page_config(page_title="PMP Simulator Elite", layout="wide", initial_sidebar_state="expanded")
@@ -140,12 +139,26 @@ def inject_js_timer(minutes, exam_name):
     """
     with st.sidebar: components.html(timer_html, height=40)
 
-# --- 5. STATE INITIALIZATION ---
-for key in ["page", "auth_mode", "current_q", "review_q_idx", "is_premium"]:
-    if key not in st.session_state: st.session_state[key] = "auth" if key == "page" else "login" if key == "auth_mode" else 0 if key != "is_premium" else False
-if "flagged" not in st.session_state: st.session_state.flagged = set()
-if "answers" not in st.session_state: st.session_state.answers = {}
-if "review_answers" not in st.session_state: st.session_state.review_answers = {}
+# --- 5. ROBUST STATE INITIALIZATION ---
+default_states = {
+    "page": "auth",
+    "auth_mode": "login",
+    "current_q": 0,
+    "review_q_idx": 0,
+    "is_premium": False,
+    "exam_title": "",
+    "active_exam": None,
+    "exam_start_time": time.time(),
+    "flagged": set(),
+    "answers": {},
+    "review_answers": {},
+    "student_email": "",
+    "student_name": ""
+}
+
+for key, value in default_states.items():
+    if key not in st.session_state:
+        st.session_state[key] = value
 
 # --- 6. PAGE: AUTHENTICATION ---
 if st.session_state.page == "auth":
@@ -154,8 +167,8 @@ if st.session_state.page == "auth":
     with col2:
         if st.session_state.auth_mode == "register":
             st.markdown("<h3 style='text-align: center;'>Create Account</h3>", unsafe_allow_html=True)
-            name = st.text_input("Full Name *", placeholder="Sagar Bhardwaj")
-            email = st.text_input("E-mail *", placeholder="sagar@example.com")
+            name = st.text_input("Full Name *", placeholder="Alex Carter")
+            email = st.text_input("E-mail *", placeholder="alex.carter@example.com")
             password = st.text_input("Create Password *", type="password")
             
             has_len, has_upper, has_lower = len(password) >= 8, bool(re.search(r'[A-Z]', password)), bool(re.search(r'[a-z]', password))
@@ -202,51 +215,68 @@ if st.session_state.page == "auth":
 # --- 7. PAGE: LMS DASHBOARD ---
 elif st.session_state.page == "dashboard":
     h_col1, h_col2 = st.columns([4, 1])
-    with h_col1: st.markdown(f"<h1>Hi, {st.session_state.student_name.split()[0]}</h1>", unsafe_allow_html=True)
+    with h_col1: 
+        st.markdown(f"<h1>Hi, {st.session_state.student_name.split()[0]}</h1>", unsafe_allow_html=True)
     with h_col2: 
-        if st.button("Log Out", use_container_width=True): st.session_state.clear(); st.rerun()
-
-    if df_full is None: st.error("Question bank V2 not found."); st.stop()
-    available_sheets = df_full['Source_Sheet'].dropna().unique().tolist()
-
-    def render_card(sheet_id, title, desc):
-        st.markdown(f'<div class="course-card"><h4>{title}</h4><p style="font-size:13px; color:#6B7280;">{desc}</p></div>', unsafe_allow_html=True)
-        if st.button("Launch", key=f"btn_{sheet_id}", type="primary", use_container_width=True):
-            st.session_state.active_exam = df_full[df_full['Source_Sheet'] == sheet_id].copy()
-            st.session_state.exam_title, st.session_state.page = title, "live_exam"
-            st.session_state.current_q, st.session_state.flagged, st.session_state.answers = 0, set(), {}
-            st.session_state.exam_start_time = time.time()
+        if st.button("Log Out", use_container_width=True): 
+            st.session_state.clear()
             st.rerun()
+
+    if df_full is None: 
+        st.error("Question bank not found.")
+        st.stop()
+        
+    available_sheets = df_full['Source_Sheet'].dropna().unique().tolist()
+    razorpay_url = f"https://pages.razorpay.com/pl_TXusukBRHuPCo4/view?email={st.session_state.student_email}"
+
+    def render_card(sheet_id, title, desc, is_locked=False):
+        if is_locked:
+            st.markdown(f'''
+            <div class="course-card" style="border: 1px solid #E5E7EB; opacity: 0.85;">
+                <h4>🔒 {title}</h4>
+                <p style="font-size:13px; color:#6B7280; margin-bottom: 8px;">{desc}</p>
+                <span style="background:#FEF3C7; color:#92400E; font-size:11px; font-weight:600; padding:2px 8px; border-radius:4px;">PREMIUM</span>
+            </div>
+            ''', unsafe_allow_html=True)
+            st.link_button("Unlock (₹699)", razorpay_url, type="primary", use_container_width=True)
+        else:
+            st.markdown(f'<div class="course-card"><h4>{title}</h4><p style="font-size:13px; color:#6B7280;">{desc}</p></div>', unsafe_allow_html=True)
+            if st.button("Launch", key=f"btn_{sheet_id}", type="primary", use_container_width=True):
+                st.session_state.active_exam = df_full[df_full['Source_Sheet'] == sheet_id].copy()
+                st.session_state.exam_title, st.session_state.page = title, "live_exam"
+                st.session_state.current_q, st.session_state.flagged, st.session_state.answers = 0, set(), {}
+                st.session_state.exam_start_time = time.time()
+                st.rerun()
 
     def paywall_block(title):
         st.markdown(f"""
-        <div style="background:white; border:1px solid #E5E7EB; border-radius:8px; padding:60px 20px; text-align:center; margin-top:20px;">
-            <h2 style="color:#374151; margin-bottom:10px;">🔒 Premium Feature</h2>
-            <p style="color:#6B7280; font-size:16px; margin-bottom:25px;">Upgrade your account to unlock {title} and accelerate your PMP preparation.</p>
+        <div style="background:white; border:1px solid #E5E7EB; border-radius:8px; padding:40px 20px; text-align:center; margin-bottom:25px;">
+            <h3 style="color:#374151; margin-bottom:8px;">🔒 Premium Access Required</h3>
+            <p style="color:#6B7280; font-size:15px; margin-bottom:20px;">Unlock all 6 Full-Length Mocks, Domain Sprints, and In-depth Analytics to accelerate your PMP preparation.</p>
         </div>
         """, unsafe_allow_html=True)
         _, c1, c2, _ = st.columns([1, 1.5, 1.5, 1])
         with c1:
-            razorpay_url = f"https://pages.razorpay.com/pl_YOUR_LINK_ID?email={st.session_state.student_email}"
-            st.link_button("Pay via Razorpay", razorpay_url, type="primary", use_container_width=True)
+            st.link_button("Secure Premium Access (₹699)", razorpay_url, type="primary", use_container_width=True)
         with c2:
-            if st.button("I have paid (Refresh Access)", use_container_width=True):
+            if st.button("Confirm Premium Activation", key=f"verify_btn_{title.replace(' ', '_')}", use_container_width=True):
                 c = conn.cursor()
                 c.execute("SELECT is_premium FROM users WHERE email=%s", (st.session_state.student_email,))
                 user_status = c.fetchone()
                 if user_status and user_status[0] == 1:
                     st.session_state.is_premium = True
-                    st.success("Payment verified! Unlocked.")
+                    st.success("Payment verified! Premium features unlocked.")
                     time.sleep(1)
                     st.rerun()
                 else:
-                    st.error("Payment not registered yet. Please wait 10 seconds and click again.")
+                    st.error("Payment not registered yet. Please wait a moment and try again.")
 
     t1, t2, t3, t4 = st.tabs(["My Analytics", "Sample Tests", "Domain Sprints", "Full Mocks"])
     
     with t1:
         st.markdown("### Recent Exam Performance")
-        if not st.session_state.is_premium: paywall_block("Advanced Analytics")
+        if not st.session_state.is_premium: 
+            paywall_block("Advanced Analytics")
         else:
             c = conn.cursor()
             c.execute("SELECT id, exam_name, score_percent, time_taken_sec, timestamp, answers_json FROM exam_results WHERE email=%s ORDER BY timestamp DESC", (st.session_state.student_email,))
@@ -268,47 +298,56 @@ elif st.session_state.page == "dashboard":
                             st.session_state.review_q_idx = 0
                             st.session_state.page = "review_exam"
                             st.rerun()
-            else: st.info("You haven't completed any exams yet.")
+            else: 
+                st.info("You haven't completed any exams yet.")
             
     with t2:
-        st.markdown("### Sample Tests")
-        if "Bonus_Questions" in available_sheets: render_card("Bonus_Questions", "Sample Test", "Establish your baseline.")
+        st.markdown("### Sample Tests (Free Access)")
+        if "Bonus_Questions" in available_sheets: 
+            render_card("Bonus_Questions", "Sample Test", "Establish your baseline.", is_locked=False)
                 
     with t3:
         st.markdown("### Domain Sprints")
-        if not st.session_state.is_premium: paywall_block("Targeted Domain Sprints")
-        else:
-            sprint_sheets = sorted([s for s in available_sheets if "Sprint" in s])
-            c1, c2, c3 = st.columns(3)
-            for i, sheet in enumerate(sprint_sheets):
-                with [c1, c2, c3][i % 3]: render_card(sheet, sheet.replace('_', ' '), "60 Questions | 75 Mins")
+        if not st.session_state.is_premium:
+            paywall_block("Targeted Domain Sprints")
+        sprint_sheets = sorted([s for s in available_sheets if "Sprint" in s])
+        c1, c2, c3 = st.columns(3)
+        for i, sheet in enumerate(sprint_sheets):
+            with [c1, c2, c3][i % 3]: 
+                render_card(sheet, sheet.replace('_', ' '), "60 Questions | 75 Mins", is_locked=(not st.session_state.is_premium))
                 
     with t4:
         st.markdown("### Full-Length Mocks")
-        if not st.session_state.is_premium: paywall_block("Full-Length Mock Exams")
-        else:
-            full_mocks = sorted([s for s in available_sheets if "Full_Mock" in s])
-            if "Free_Mock_Test" in available_sheets: full_mocks.append("Free_Mock_Test")
-            c1, c2, c3 = st.columns(3)
-            for i, sheet in enumerate(full_mocks):
-                with [c1, c2, c3][i % 3]: 
-                    title = "Bonus Mock Test" if sheet == "Free_Mock_Test" else sheet.replace('_', ' ')
-                    render_card(sheet, title, "180 Questions | 230 Mins")
+        if not st.session_state.is_premium:
+            paywall_block("Full-Length Mock Exams")
+        full_mocks = sorted([s for s in available_sheets if "Full_Mock" in s])
+        if "Free_Mock_Test" in available_sheets: 
+            full_mocks.append("Free_Mock_Test")
+        c1, c2, c3 = st.columns(3)
+        for i, sheet in enumerate(full_mocks):
+            with [c1, c2, c3][i % 3]: 
+                title = "Bonus Mock Test" if sheet == "Free_Mock_Test" else sheet.replace('_', ' ')
+                render_card(sheet, title, "180 Questions | 230 Mins", is_locked=(not st.session_state.is_premium))
 
 # --- 8. PAGE: LIVE EXAM ---
 elif st.session_state.page == "live_exam":
+    if st.session_state.active_exam is None:
+        st.session_state.page = "dashboard"
+        st.rerun()
+        
     df_exam = st.session_state.active_exam
     total_q = len(df_exam)
     idx = st.session_state.current_q
+    
     st.sidebar.markdown(f"**{st.session_state.exam_title}**")
     
     # Custom Timer Logic
     if st.session_state.exam_title == "Sample Test":
-        time_limit = 15  # Exactly 15 minutes for the Sample Test
+        time_limit = 15
     elif "Mock" in st.session_state.exam_title:
-        time_limit = 230 # 230 minutes for Full Mocks
+        time_limit = 230
     else:
-        time_limit = 75  # 75 minutes for Domain Sprints
+        time_limit = 75
         
     inject_js_timer(time_limit, st.session_state.exam_title)
     
