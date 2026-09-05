@@ -90,6 +90,10 @@ def init_supabase():
 conn = init_connection()
 supabase = init_supabase()
 
+# Restored for Legacy SQL Fallback authentication
+def hash_pass(password): 
+    return hashlib.sha256(password.encode()).hexdigest()
+
 # --- 3. DATA SANITIZATION & PIPELINE ---
 def clean_pmp_text(text):
     if not isinstance(text, str): return text
@@ -136,19 +140,28 @@ def get_sheet_from_title(title):
     return title.replace(' ', '_')
 
 # --- 4. JS TIMER ---
-def inject_js_timer(minutes, exam_name):
-    safe_name = exam_name.replace(" ", "_")
+def inject_js_timer(minutes, start_time_sec):
+    # Calculate exact end time in milliseconds using Python's start time
+    end_time_ms = int((start_time_sec + (minutes * 60)) * 1000)
+    
     timer_html = f"""
     <div style="font-size:16px; font-weight:700; color:#111827; padding: 10px 0;">Time Remaining: <span id="time" style="color:#2563EB;">Loading...</span></div>
     <script>
-        var examKey = 'pmp_timer_v2_{safe_name}';
-        var endTime = sessionStorage.getItem(examKey);
-        if (!endTime) {{ endTime = new Date().getTime() + ({minutes} * 60000); sessionStorage.setItem(examKey, endTime); }}
+        var endTime = {end_time_ms};
         var x = setInterval(function() {{
-            var now = new Date().getTime(), distance = endTime - now;
-            var h = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)), m = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60)), s = Math.floor((distance % (1000 * 60)) / 1000);
-            document.getElementById("time").innerHTML = (h<10?"0"+h:h) + ":" + (m<10?"0"+m:m) + ":" + (s<10?"0"+s:s);
-            if (distance < 0) {{ clearInterval(x); document.getElementById("time").innerHTML = "00:00:00"; document.getElementById("time").style.color = "#DC2626"; }}
+            var now = new Date().getTime();
+            var distance = endTime - now;
+            
+            if (distance < 0) {{ 
+                clearInterval(x); 
+                document.getElementById("time").innerHTML = "00:00:00"; 
+                document.getElementById("time").style.color = "#DC2626"; 
+            }} else {{
+                var h = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                var m = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+                var s = Math.floor((distance % (1000 * 60)) / 1000);
+                document.getElementById("time").innerHTML = (h<10?"0"+h:h) + ":" + (m<10?"0"+m:m) + ":" + (s<10?"0"+s:s);
+            }}
         }}, 1000);
     </script>
     """
@@ -182,9 +195,9 @@ if st.session_state.page == "auth":
     with col2:
         if st.session_state.auth_mode == "register":
             st.markdown("<h3 style='text-align: center;'>Create Account</h3>", unsafe_allow_html=True)
-            name = st.text_input("Full Name *", placeholder="Alex Carter")
-            email = st.text_input("E-mail *", placeholder="alex.carter@example.com")
-            password = st.text_input("Create Password *", type="password")
+            name = st.text_input("Full Name *", placeholder="Alex Carter", key="reg_name")
+            email = st.text_input("E-mail *", placeholder="alex.carter@example.com", key="reg_email")
+            password = st.text_input("Create Password *", type="password", key="reg_pass")
             
             has_len, has_upper, has_lower = len(password) >= 8, bool(re.search(r'[A-Z]', password)), bool(re.search(r'[a-z]', password))
             has_num, has_spec = bool(re.search(r'\d', password)), bool(re.search(r'[@$!%*?&_]', password))
@@ -223,15 +236,14 @@ if st.session_state.page == "auth":
 
         elif st.session_state.auth_mode == "login":
             st.markdown("<h3 style='text-align: center;'>Sign In</h3>", unsafe_allow_html=True)
-            email = st.text_input("E-mail *")
-            password = st.text_input("Password *", type="password")
+            email = st.text_input("E-mail *", key="login_email")
+            password = st.text_input("Password *", type="password", key="login_pass")
             
             if st.button("Sign in", type="primary", use_container_width=True):
                 try:
-                    # 1. Authenticate via Supabase Native Auth API
+                    # 1. Try to Authenticate via the NEW Supabase Native Auth API
                     supabase.auth.sign_in_with_password({"email": email.lower(), "password": password})
                     
-                    # 2. Fetch premium status & name from your custom table
                     c = conn.cursor()
                     c.execute("SELECT first_name, last_name, is_premium FROM users WHERE email=%s", (email.lower(),))
                     user = c.fetchone()
@@ -243,8 +255,20 @@ if st.session_state.page == "auth":
                         st.rerun()
                     else:
                         st.error("Profile sync error. Contact support.")
-                except Exception as e:
-                    st.error("Invalid email or password.")
+                        
+                except Exception:
+                    # 2. LEGACY FALLBACK: If Supabase Auth fails, check the OLD custom users table
+                    c = conn.cursor()
+                    c.execute("SELECT first_name, last_name, is_premium FROM users WHERE email=%s AND password_hash=%s", (email.lower(), hash_pass(password)))
+                    old_user = c.fetchone()
+                    
+                    if old_user:
+                        st.session_state.student_name, st.session_state.student_email = f"{old_user[0]} {old_user[1]}", email.lower()
+                        st.session_state.is_premium = bool(old_user[2] or 0)
+                        st.session_state.page = "dashboard"
+                        st.rerun()
+                    else:
+                        st.error("Invalid email or password.")
             
             if st.button("Forgot Password?", use_container_width=True): st.session_state.auth_mode = "forgot"; st.rerun()
             if st.button("Need an account? Sign up", use_container_width=True): st.session_state.auth_mode = "register"; st.rerun()
@@ -252,7 +276,7 @@ if st.session_state.page == "auth":
         elif st.session_state.auth_mode == "forgot":
             st.markdown("<h3 style='text-align: center;'>Reset Password</h3>", unsafe_allow_html=True)
             st.info("Enter your registered email address to receive instructions on how to reset your password.")
-            reset_email = st.text_input("E-mail *")
+            reset_email = st.text_input("E-mail *", key="forgot_email")
             
             if st.button("Send Reset Link", type="primary", use_container_width=True):
                 if reset_email:
@@ -408,7 +432,8 @@ elif st.session_state.page == "live_exam":
     # --- MAIN SCREEN TOP BAR (visible on mobile, since the sidebar is hidden) ---
     top1, top2, top3 = st.columns([2, 2, 1])
     with top1:
-        inject_js_timer(time_limit, st.session_state.exam_title)
+        # NEW: Pass Python's exact start time instead of the exam title
+        inject_js_timer(time_limit, st.session_state.exam_start_time)
     with top2:
         st.progress((idx) / total_q if total_q > 0 else 0)
         st.markdown(f"<div style='text-align:center; font-size:13px; color:#6B7280; margin-top:5px;'>Question {idx + 1} of {total_q}</div>", unsafe_allow_html=True)
