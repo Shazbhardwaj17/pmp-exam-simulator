@@ -6,6 +6,7 @@ import hashlib
 import time
 import json
 import streamlit.components.v1 as components
+from supabase import create_client, Client # NEW IMPORT
 
 # --- 1. PAGE CONFIG & CORE CSS ---
 st.set_page_config(page_title="PMP Simulator Elite", layout="wide", initial_sidebar_state="expanded")
@@ -82,9 +83,12 @@ st.markdown("""
 def init_connection():
     return psycopg2.connect(st.secrets["DATABASE_URL"])
 
-conn = init_connection()
+@st.cache_resource
+def init_supabase():
+    return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
 
-def hash_pass(password): return hashlib.sha256(password.encode()).hexdigest()
+conn = init_connection()
+supabase = init_supabase()
 
 # --- 3. DATA SANITIZATION & PIPELINE ---
 def clean_pmp_text(text):
@@ -133,9 +137,7 @@ def get_sheet_from_title(title):
 
 # --- 4. JS TIMER ---
 def inject_js_timer(minutes, exam_name):
-    # Include the attempt's start time so each new launch gets a fresh key,
-    # instead of reusing a stale/expired countdown from a previous attempt.
-    safe_name = f"{exam_name}_{int(st.session_state.get('exam_start_time', time.time()))}".replace(" ", "_")
+    safe_name = exam_name.replace(" ", "_")
     timer_html = f"""
     <div style="font-size:16px; font-weight:700; color:#111827; padding: 10px 0;">Time Remaining: <span id="time" style="color:#2563EB;">Loading...</span></div>
     <script>
@@ -198,32 +200,72 @@ if st.session_state.page == "auth":
             """, unsafe_allow_html=True)
             
             if st.button("Start your learning journey", type="primary", use_container_width=True):
-                if not (has_len and has_upper and has_lower and has_num and has_spec): st.error("Please meet all password requirements.")
+                if not (has_len and has_upper and has_lower and has_num and has_spec): 
+                    st.error("Please meet all password requirements.")
                 else:
                     try:
+                        # 1. Create secure user in Supabase Native Auth
+                        supabase.auth.sign_up({"email": email.lower(), "password": password})
+                        
+                        # 2. Add profile to custom table so Razorpay Webhooks still work
                         c = conn.cursor()
-                        c.execute("INSERT INTO users (email, first_name, last_name, password_hash, is_premium) VALUES (%s, %s, %s, %s, 0)", (email.lower(), name.split()[0], name.split()[-1] if len(name.split())>1 else "", hash_pass(password)))
+                        c.execute("INSERT INTO users (email, first_name, last_name, password_hash, is_premium) VALUES (%s, %s, %s, 'supabase_auth', 0)", 
+                                  (email.lower(), name.split()[0], name.split()[-1] if len(name.split())>1 else ""))
                         conn.commit()
-                        st.session_state.auth_mode = "login"; st.success("Registered! Please log in."); st.rerun()
-                    except psycopg2.IntegrityError: 
+                        
+                        st.session_state.auth_mode = "login"
+                        st.success("Registered successfully! Please log in.")
+                        st.rerun()
+                    except Exception as e:
                         conn.rollback()
-                        st.error("Email already registered.")
+                        st.error(f"Registration failed. Email may already be in use.")
             if st.button("Already have an account? Sign in", use_container_width=True): st.session_state.auth_mode = "login"; st.rerun()
 
         elif st.session_state.auth_mode == "login":
             st.markdown("<h3 style='text-align: center;'>Sign In</h3>", unsafe_allow_html=True)
             email = st.text_input("E-mail *")
             password = st.text_input("Password *", type="password")
+            
             if st.button("Sign in", type="primary", use_container_width=True):
-                c = conn.cursor()
-                c.execute("SELECT first_name, last_name, is_premium FROM users WHERE email=%s AND password_hash=%s", (email.lower(), hash_pass(password)))
-                user = c.fetchone()
-                if user:
-                    st.session_state.student_name, st.session_state.student_email = f"{user[0]} {user[1]}", email.lower()
-                    st.session_state.is_premium = bool(user[2] or 0)
-                    st.session_state.page = "dashboard"; st.rerun()
-                else: st.error("Invalid credentials.")
+                try:
+                    # 1. Authenticate via Supabase Native Auth API
+                    supabase.auth.sign_in_with_password({"email": email.lower(), "password": password})
+                    
+                    # 2. Fetch premium status & name from your custom table
+                    c = conn.cursor()
+                    c.execute("SELECT first_name, last_name, is_premium FROM users WHERE email=%s", (email.lower(),))
+                    user = c.fetchone()
+                    
+                    if user:
+                        st.session_state.student_name, st.session_state.student_email = f"{user[0]} {user[1]}", email.lower()
+                        st.session_state.is_premium = bool(user[2] or 0)
+                        st.session_state.page = "dashboard"
+                        st.rerun()
+                    else:
+                        st.error("Profile sync error. Contact support.")
+                except Exception as e:
+                    st.error("Invalid email or password.")
+            
+            if st.button("Forgot Password?", use_container_width=True): st.session_state.auth_mode = "forgot"; st.rerun()
             if st.button("Need an account? Sign up", use_container_width=True): st.session_state.auth_mode = "register"; st.rerun()
+
+        elif st.session_state.auth_mode == "forgot":
+            st.markdown("<h3 style='text-align: center;'>Reset Password</h3>", unsafe_allow_html=True)
+            st.info("Enter your registered email address to receive instructions on how to reset your password.")
+            reset_email = st.text_input("E-mail *")
+            
+            if st.button("Send Reset Link", type="primary", use_container_width=True):
+                if reset_email:
+                    try:
+                        # Built-in Supabase Reset API
+                        supabase.auth.reset_password_email(reset_email.lower())
+                        st.success("If this email is registered, a password reset link has been sent to your inbox.")
+                    except Exception as e:
+                        st.error("Error sending request. Please try again.")
+                else:
+                    st.error("Please enter an email address.")
+                    
+            if st.button("← Back to Sign In", use_container_width=True): st.session_state.auth_mode = "login"; st.rerun()
 
 # --- 7. PAGE: LMS DASHBOARD ---
 elif st.session_state.page == "dashboard":
